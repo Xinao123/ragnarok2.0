@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16
+    container_name: ragnarok-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: "ragnarok"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: ragnarok-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: "minio"
+      MINIO_ROOT_PASSWORD: "minio123"
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  socket-server:
+    build:
+      context: ./socket-server
+      dockerfile: Dockerfile
+    container_name: ragnarok-socket
+    ports:
+      - "4000:4000"
+    environment:
+      SOCKET_PORT: "4000"
+      NEXT_API_BASE: "http://host.docker.internal:3000"
+      CHAT_ENCRYPTION_KEY: "${CHAT_ENCRYPTION_KEY}"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+  minio_data:
