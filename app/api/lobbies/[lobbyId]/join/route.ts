@@ -2,12 +2,11 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { joinLobby } from "@/lib/lobbies";
 
-export async function POST(
-  _req: any,
-  { params }: { params: Promise<{ lobbyId: string }> }
-) {
+export async function POST(_req: any, context: any) {
   try {
-    const { lobbyId } = await params;
+    // context.params pode ser um objeto ou um Promise<obj>
+    const resolved = await Promise.resolve(context?.params);
+    const lobbyId = resolved?.lobbyId as string | undefined;
 
     const user = await getCurrentUser();
     if (!user?.id) {
