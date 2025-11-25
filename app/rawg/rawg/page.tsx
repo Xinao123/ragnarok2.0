@@ -1,4 +1,4 @@
-import { getTrendingGames } from "@/lib/rawg";
+import { searchGames } from "@/lib/rawg";
 
 export default async function RawgTestPage() {
   const data = await getTrendingGames(1, 12);
