@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     });
 
     // <-- AQUI a mágica: devolve content já legível
-    const messages = msgs.map((m) => ({
+    const messages = msgs.map((m: any) => ({
       id: m.id,
       conversationId: m.conversationId,
       fromUserId: m.fromUserId,
