@@ -1,22 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { joinLobby } from "@/lib/lobbies";
 
-type RouteParams = {
-  params: {
-    lobbyId: string;
-  };
-};
 
-export async function POST(_req: Request, { params }: RouteParams) {
-  try {
-    const user = await getCurrentUser();
-    if (!user?.id) {
-      return NextResponse.json(
-        { error: "Não autenticado." },
-        { status: 401 }
-      );
-    }
+
+export async function POST(
+  _req: NextRequest,
+  { params }: { params: { lobbyId: string } }
+) {
 
     const lobbyId = params.lobbyId;
     if (!lobbyId) {
