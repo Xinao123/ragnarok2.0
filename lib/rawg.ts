@@ -53,7 +53,8 @@ async function rawgGet<T>(path: string, params: Record<string, any>) {
   const url = buildUrl(path, params);
 
   const res = await fetch(url, {
-    next: { revalidate: 60 * 60 }, // 1h de cache leve
+    // cache leve no lado do servidor
+    next: { revalidate: 60 * 60 },
     headers: {
       "User-Agent": "Ragnarok2.0/1.0 (+https://seuapp)",
     },
@@ -67,32 +68,15 @@ async function rawgGet<T>(path: string, params: Record<string, any>) {
   return (await res.json()) as T;
 }
 
-/**
- * Jogos online / multiplayer em destaque.
- * Filtra por tags multiplayer/online/co-op e ordena pelos melhor avaliados.
- */
-export function getOnlineGames(page = 1, pageSize = 12) {
-  return rawgGet<RawgGamesResponse>("/games", {
-    tags: "multiplayer,online,co-op",
-    ordering: "-rating",
-    page,
-    page_size: pageSize,
-  });
-}
-
-// (se quiser manter, pode deixar a função de trending)
-// export function getTrendingGames(page = 1, pageSize = 12) {
-//   return rawgGet<RawgGamesResponse>("/games", {
-//     ordering: "-added",
-//     page,
-//     page_size: pageSize,
-//   });
-// }
-
 export function searchGames(search: string, page = 1, pageSize = 12) {
   return rawgGet<RawgGamesResponse>("/games", {
     search,
     page,
     page_size: pageSize,
   });
+}
+
+// 🔹 Novo: buscar detalhes de um jogo pelo ID numérico do RAWG
+export function getGameById(rawgId: number) {
+  return rawgGet<RawgGame>(`/games/${rawgId}`, {});
 }
