@@ -48,18 +48,18 @@ export async function GET() {
         }),
     ]);
 
-    const friends = friendships.map((f) => {
+    const friends = friendships.map((f: any) => {
         const other = f.userAId === user.id ? f.userB : f.userA;
         return other;
     });
 
-    const incomingOut = incoming.map((req) => ({
+    const incomingOut = incoming.map((req: any) => ({
         id: req.id,
         createdAt: req.createdAt,
         fromUser: req.fromUser,
     }));
 
-    const outgoingOut = outgoing.map((req) => ({
+    const outgoingOut = outgoing.map((req: any) => ({
         id: req.id,
         createdAt: req.createdAt,
         toUser: req.toUser,
