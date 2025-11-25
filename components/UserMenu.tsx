@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, User, Settings, Check } from "lucide-react";
-import { logoutAction } from "@/app/auth/actions"; // ajuste se seu caminho for outro
+import { logoutAction } from "@/app/auth/actions";
 
 type StatusValue = "ONLINE" | "AWAY" | "BUSY" | "INVISIBLE" | "OFFLINE";
 
@@ -19,6 +19,8 @@ type UserMenuUser = {
 };
 
 type Props = { user: UserMenuUser };
+
+const STORAGE_KEY = "ragnarok:status";
 
 const statusClass = (status?: StatusValue) => {
   switch (status) {
@@ -37,11 +39,16 @@ const statusClass = (status?: StatusValue) => {
 
 const statusLabel = (status?: StatusValue) => {
   switch (status) {
-    case "ONLINE": return "Online";
-    case "AWAY": return "Ausente";
-    case "BUSY": return "Ocupado";
-    case "INVISIBLE": return "Invisível";
-    default: return "Offline";
+    case "ONLINE":
+      return "Online";
+    case "AWAY":
+      return "Ausente";
+    case "BUSY":
+      return "Ocupado";
+    case "INVISIBLE":
+      return "Invisível";
+    default:
+      return "Offline";
   }
 };
 
@@ -50,13 +57,39 @@ export function UserMenu({ user }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
-  // status local (pra bolinha mudar na hora)
+  const options: StatusValue[] = [
+    "ONLINE",
+    "AWAY",
+    "BUSY",
+    "INVISIBLE",
+    "OFFLINE",
+  ];
+
+  // status local
   const [currentStatus, setCurrentStatus] = useState<StatusValue>(
     user.status ?? "OFFLINE"
   );
 
+  // ✅ ao montar no client, tenta restaurar último status escolhido
   useEffect(() => {
-    setCurrentStatus(user.status ?? "OFFLINE");
+    try {
+      const persisted = localStorage.getItem(STORAGE_KEY) as StatusValue | null;
+      if (persisted && options.includes(persisted)) {
+        setCurrentStatus(persisted);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ quando o server mandar status (ex: refresh), sincroniza e salva
+  useEffect(() => {
+    if (user.status && user.status !== currentStatus) {
+      setCurrentStatus(user.status);
+      try {
+        localStorage.setItem(STORAGE_KEY, user.status);
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.status]);
 
   const displayName = useMemo(() => {
@@ -68,14 +101,6 @@ export function UserMenu({ user }: Props) {
   }, [displayName]);
 
   const selfProfileHref = user.username ? `/u/${user.username}` : "/profile";
-
-  const options: StatusValue[] = [
-    "ONLINE",
-    "AWAY",
-    "BUSY",
-    "INVISIBLE",
-    "OFFLINE",
-  ];
 
   async function updateStatus(newStatus: StatusValue) {
     setCurrentStatus(newStatus); // optimistic
@@ -92,7 +117,12 @@ export function UserMenu({ user }: Props) {
         return;
       }
 
-      router.refresh(); // reflete em server components
+      // ✅ persiste localmente
+      try {
+        localStorage.setItem(STORAGE_KEY, newStatus);
+      } catch {}
+
+      router.refresh();
       setOpen(false);
     } catch {
       setCurrentStatus(user.status ?? "OFFLINE");
@@ -116,7 +146,7 @@ export function UserMenu({ user }: Props) {
     };
   }, [open]);
 
-  // ✅ Hover com delay pra não fechar rápido
+  // hover com delay
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function openNow() {
@@ -142,7 +172,6 @@ export function UserMenu({ user }: Props) {
       onMouseEnter={openNow}
       onMouseLeave={closeSoon}
     >
-      {/* Botão do usuário */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -150,7 +179,6 @@ export function UserMenu({ user }: Props) {
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {/* Avatar com bolinha */}
         <div className="relative">
           {user.avatarUrl ? (
             <img
@@ -182,7 +210,6 @@ export function UserMenu({ user }: Props) {
         <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div
           role="menu"
@@ -190,7 +217,6 @@ export function UserMenu({ user }: Props) {
           onMouseLeave={closeSoon}
           className="absolute right-0 mt-2 w-44 rounded-xl border border-slate-800 bg-slate-950 shadow-xl shadow-black/60 overflow-hidden z-50"
         >
-          {/* Status compacto */}
           <div className="px-2 py-2">
             <div className="flex items-center justify-between mb-1">
               <p className="text-[9px] uppercase tracking-wide text-slate-500">
@@ -210,7 +236,9 @@ export function UserMenu({ user }: Props) {
                   className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] text-slate-200 hover:bg-slate-900 transition-colors"
                 >
                   <span
-                    className={`h-2 w-2 rounded-full ${statusClass(opt)} border border-slate-900`}
+                    className={`h-2 w-2 rounded-full ${statusClass(
+                      opt
+                    )} border border-slate-900`}
                   />
                   <span className="flex-1 text-left">{statusLabel(opt)}</span>
                   {currentStatus === opt && (

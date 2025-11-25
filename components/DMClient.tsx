@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "@/lib/socket-client";
+import { SendHorizonal } from "lucide-react";
 
 type OtherUser = {
   id: string;
@@ -12,8 +13,9 @@ type OtherUser = {
 
 type MessageVM = {
   id: string;
+  conversationId: string;
   fromUserId: string;
-  content: string;          // <- API manda content plaintext
+  content: string;
   createdAt: string;
   fromUser?: {
     id: string;
@@ -23,15 +25,54 @@ type MessageVM = {
   };
 };
 
-// aceita msg vindo da API (content) ou socket antigo (text)
 function normalizeMessage(raw: any): MessageVM {
   return {
     id: raw.id,
+    conversationId: raw.conversationId ?? raw.conversation?.id ?? "",
     fromUserId: raw.fromUserId,
     content: raw.content ?? raw.text ?? "",
     createdAt: raw.createdAt,
     fromUser: raw.fromUser,
   };
+}
+
+function initials(name?: string | null, username?: string | null) {
+  const base = name || username || "?";
+  const parts = base.trim().split(" ");
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function Avatar({
+  url,
+  name,
+  username,
+  size = 36,
+}: {
+  url?: string | null;
+  name?: string | null;
+  username?: string | null;
+  size?: number;
+}) {
+  const letter = initials(name, username);
+  return (
+    <div
+      className="shrink-0 rounded-full bg-slate-800/80 border border-slate-700 grid place-items-center overflow-hidden text-slate-100 font-semibold"
+      style={{ width: size, height: size, fontSize: size * 0.38 }}
+      title={name ?? username ?? ""}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt={name ?? username ?? "avatar"}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <span>{letter}</span>
+      )}
+    </div>
+  );
 }
 
 export function DMClient({
@@ -53,8 +94,13 @@ export function DMClient({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
+
+  useEffect(() => {
+    socketRef.current = getSocket(meId);
+  }, [meId]);
+
   async function loadMessages() {
-    // aborta fetch anterior (troca de conversa)
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -65,22 +111,15 @@ export function DMClient({
 
       const res = await fetch(
         `/api/dm/messages?conversationId=${conversationId}`,
-        {
-          cache: "no-store",
-          signal: controller.signal,
-        }
+        { cache: "no-store", signal: controller.signal }
       );
 
-      if (!res.ok) {
-        throw new Error(`Falha ao carregar mensagens (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`Falha ao carregar mensagens (${res.status})`);
 
       const json = (await res.json()) as { messages: any[] };
       setMessages((json.messages || []).map(normalizeMessage));
     } catch (e: any) {
-      // silencia AbortError (não é bug)
       if (e?.name === "AbortError") return;
-
       console.error(e);
       setLoadError("Não foi possível carregar as mensagens.");
     } finally {
@@ -94,11 +133,16 @@ export function DMClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
-  // realtime socket
   useEffect(() => {
-    const socket = getSocket(meId);
+    const socket = socketRef.current;
+    if (!socket || !conversationId) return;
 
-    socket.emit("dm:join", { conversationId });
+    const joinRoom = () => {
+      socket.emit("dm:join", { conversationId });
+    };
+
+    if (socket.connected) joinRoom();
+    socket.on("connect", joinRoom);
 
     const onNew = (raw: any) => {
       const msg = normalizeMessage(raw);
@@ -109,14 +153,15 @@ export function DMClient({
     };
 
     socket.on("dm:new", onNew);
-    socket.on("dm:message", onNew); // compat
+    socket.on("dm:message", onNew);
 
     return () => {
+      socket.off("connect", joinRoom);
       socket.off("dm:new", onNew);
       socket.off("dm:message", onNew);
       socket.emit("dm:leave", { conversationId });
     };
-  }, [conversationId, meId]);
+  }, [conversationId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -131,29 +176,20 @@ export function DMClient({
     setError(null);
 
     try {
-      // 1) salva no banco via API
       const res = await fetch("/api/dm/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId,
-          content: trimmed,
-        }),
+        body: JSON.stringify({ conversationId, content: trimmed }),
       });
 
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
+      if (!res.ok) throw new Error(await res.text());
 
       const { message } = await res.json();
       const saved = normalizeMessage(message);
 
-      // 2) UI local
       setMessages((prev) => [...prev, saved]);
 
-      // 3) realtime
-      const socket = getSocket(meId);
-      socket.emit("dm:send", saved);
+      socketRef.current?.emit("dm:send", { ...saved, conversationId });
 
       setText("");
     } catch (e) {
@@ -165,44 +201,130 @@ export function DMClient({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 flex flex-col gap-3 min-h-[60vh]">
-      <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+    // ✅ overflow-visible pra dropdown do header não ser cortado
+    <div className="relative w-full h-[70vh] md:h-[75vh] flex flex-col rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 overflow-visible shadow-2xl">
+      
+      {/* ✅ Header com z alto + overflow visível */}
+      <div className="relative z-30 flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-950/70 backdrop-blur overflow-visible">
+        <Avatar
+          url={otherUser?.avatarUrl}
+          name={otherUser?.name}
+          username={otherUser?.username}
+          size={40}
+        />
+        <div className="flex flex-col leading-tight">
+          <span className="text-slate-100 font-semibold text-sm md:text-base">
+            {otherUser?.name || otherUser?.username || "Jogador"}
+          </span>
+          <span className="text-slate-400 text-xs">
+            @{otherUser?.username || "player"}
+          </span>
+        </div>
+
+        {/* teu mini menu fica aqui; por estar no header com z-30 ele vai aparecer por cima */}
+        {/* exemplo:
+          <YourHeaderMenu className="ml-auto" />
+        */}
+      </div>
+
+      {/* ✅ Messages com scrollbar melhor (z menor que o header) */}
+      <div
+        className="
+          relative z-10 flex-1 overflow-y-auto overflow-x-hidden
+          px-3 md:px-4 py-4 space-y-2
+          scrollbar-thin
+          scrollbar-thumb-slate-700/70 hover:scrollbar-thumb-slate-500/90
+          scrollbar-track-slate-900/40
+          scrollbar-thumb-rounded-full scrollbar-track-rounded-full
+        "
+      >
         {loading && (
-          <p className="text-xs text-slate-400">Carregando conversa...</p>
+          <div className="text-center text-slate-400 text-sm">
+            Carregando conversa...
+          </div>
         )}
 
         {loadError && (
-          <p className="text-xs text-rose-300">{loadError}</p>
+          <div className="text-center text-rose-300 text-sm">
+            {loadError}
+          </div>
         )}
 
         {!loading && !loadError && messages.length === 0 && (
-          <p className="text-xs text-slate-500">
-            Nenhuma mensagem ainda. Dê um oi pra{" "}
-            <span className="text-slate-200">
-              {otherUser?.username || "jogador"}
-            </span>{" "}
-            🙂
-          </p>
+          <div className="text-center text-slate-500 text-sm mt-6">
+            Nenhuma mensagem ainda. Dê um oi 🙂
+          </div>
         )}
 
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           const mine = m.fromUserId === meId;
+          const prev = messages[i - 1];
+          const next = messages[i + 1];
+
+          const startsGroup = !prev || prev.fromUserId !== m.fromUserId;
+          const endsGroup = !next || next.fromUserId !== m.fromUserId;
+
           return (
             <div
               key={m.id}
-              className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
-                mine
-                  ? "ml-auto bg-sky-600/20 border border-sky-500/40 text-slate-100"
-                  : "bg-slate-900 border border-slate-800 text-slate-100"
-              }`}
+              className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}
             >
-              <p className="whitespace-pre-wrap break-words">{m.content}</p>
-              <p className="mt-1 text-[10px] text-slate-400">
-                {new Date(m.createdAt).toLocaleTimeString("pt-BR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </p>
+              {!mine && (
+                <div className="w-9">
+                  {startsGroup ? (
+                    <Avatar
+                      url={m.fromUser?.avatarUrl}
+                      name={m.fromUser?.name}
+                      username={m.fromUser?.username}
+                      size={34}
+                    />
+                  ) : (
+                    <div className="w-[34px] h-[34px]" />
+                  )}
+                </div>
+              )}
+
+              <div className="max-w-[78%] md:max-w-[65%]">
+                {startsGroup && !mine && (
+                  <div className="text-[11px] text-slate-400 mb-1 ml-1">
+                    {m.fromUser?.name || m.fromUser?.username || "Jogador"}
+                  </div>
+                )}
+
+                <div
+                  className={[
+                    "px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-[15px] leading-relaxed break-words",
+                    mine
+                      ? "bg-sky-500/15 border border-sky-400/30 text-slate-50 rounded-2xl rounded-br-md"
+                      : "bg-slate-900/80 border border-slate-800 text-slate-100 rounded-2xl rounded-bl-md",
+                  ].join(" ")}
+                >
+                  <p className="whitespace-pre-wrap">{m.content}</p>
+                </div>
+
+                {endsGroup && (
+                  <div
+                    className={`text-[10px] text-slate-500 mt-1 ${
+                      mine ? "text-right mr-1" : "text-left ml-1"
+                    }`}
+                  >
+                    {new Date(m.createdAt).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {mine && (
+                <div className="w-9">
+                  {endsGroup ? (
+                    <Avatar url={null} name="Você" username="me" size={28} />
+                  ) : (
+                    <div className="w-[28px] h-[28px]" />
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -210,20 +332,28 @@ export function DMClient({
         <div ref={bottomRef} />
       </div>
 
-      {error && <p className="text-[11px] text-rose-300">{error}</p>}
+      {error && (
+        <div className="px-4 pb-2 text-[12px] text-rose-300">{error}</div>
+      )}
 
-      <form onSubmit={sendMessage} className="flex items-center gap-2">
+      {/* Input */}
+      <form
+        onSubmit={sendMessage}
+        className="sticky bottom-0 flex items-center gap-2 px-3 md:px-4 py-3 border-t border-slate-800 bg-slate-950/80 backdrop-blur"
+      >
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Digite sua mensagem..."
-          className="flex-1 rounded-xl bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/40"
+          className="flex-1 rounded-2xl bg-slate-900/80 border border-slate-700 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
         />
         <button
           disabled={sending}
-          className="rounded-xl bg-sky-600 hover:bg-sky-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          className="grid place-items-center rounded-2xl bg-sky-600 hover:bg-sky-500 w-11 h-11 text-white disabled:opacity-60 transition"
+          aria-label="Enviar"
+          title="Enviar"
         >
-          {sending ? "Enviando..." : "Enviar"}
+          <SendHorizonal size={18} />
         </button>
       </form>
     </div>

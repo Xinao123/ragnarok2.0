@@ -3,13 +3,12 @@ import http from "http";
 import cors from "cors";
 import { Server } from "socket.io";
 
+
 // ✅ carrega .env só em dev, sem importar dotenv em produção
 if (process.env.NODE_ENV !== "production") {
   import("dotenv")
     .then((dotenv) => dotenv.config())
-    .catch(() => {
-      /* se não tiver dotenv instalado em dev por algum motivo, só ignora */
-    });
+    .catch(() => {});
 }
 
 const app = express();
@@ -36,47 +35,60 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   const userId = socket.data.userId as string;
 
+  // log seguro (sem dados do chat)
+  console.log("[socket] connected:", socket.id, "user:", userId);
+
   // ===== DMs =====
 
   socket.on("dm:join", ({ conversationId }: { conversationId: string }) => {
     if (!conversationId) return;
-    socket.join(`dm:${conversationId}`);
-    // console.log("[dm] join", conversationId, userId);
+    const room = `dm:${conversationId}`;
+    socket.join(room);
+
+    // log seguro
+    console.log("[dm] join:", room, "socket:", socket.id);
   });
 
   socket.on("dm:leave", ({ conversationId }: { conversationId: string }) => {
     if (!conversationId) return;
-    socket.leave(`dm:${conversationId}`);
+    const room = `dm:${conversationId}`;
+    socket.leave(room);
+
+    // log seguro
+    console.log("[dm] leave:", room, "socket:", socket.id);
   });
 
   /**
-   * Agora o front:
-   * 1) faz POST /api/dm/messages (salva no banco)
-   * 2) recebe { message } já plaintext
-   * 3) emite socket "dm:send" com esse objeto salvo
-   *
-   * Então aqui a gente só retransmite pra sala.
+   * Fluxo:
+   * front salva em /api/dm/messages -> recebe {message}
+   * emite "dm:send" com a mensagem pronta.
+   * Aqui só retransmite pra sala.
    */
-// front já salva no Next em /api/dm/messages
-// aqui a gente só retransmite pra sala
-socket.on("dm:send", (rawMessage: any) => {
-  const conversationId = rawMessage?.conversationId;
-  if (!conversationId) return;
+  socket.on("dm:send", (rawMessage: any) => {
+    const conversationId =
+      rawMessage?.conversationId ?? rawMessage?.conversation?.id;
 
-  const room = `dm:${conversationId}`;
+    if (!conversationId) return;
 
-  const message = {
-    ...rawMessage,
-    content: rawMessage.content ?? rawMessage.text ?? "",
-    fromUserId: rawMessage.fromUserId ?? userId,
-  };
+    const room = `dm:${conversationId}`;
 
-  io.to(room).emit("dm:new", message);
-  io.to(room).emit("dm:message", message); // compat
-});
+    const message = {
+      ...rawMessage,
+      conversationId,
+      content: rawMessage.content ?? rawMessage.text ?? "",
+      fromUserId: rawMessage.fromUserId ?? userId,
+    };
 
+    // log seguro: só metadata
+    console.log("[dm] broadcast:", room, "msgId:", message.id);
 
-  // ===== resto dos teus handlers de lobby/presence continuam aqui =====
+    io.to(room).emit("dm:new", message);
+    io.to(room).emit("dm:message", message);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("[socket] disconnected:", socket.id, "user:", userId);
+  });
 });
 
 const PORT = Number(process.env.SOCKET_PORT || 4000);

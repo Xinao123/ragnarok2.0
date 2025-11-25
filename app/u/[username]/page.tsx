@@ -131,14 +131,18 @@ export default async function PublicProfilePage({ params }: PageProps) {
 
         {/* Ações */}
         <div className="flex items-center gap-2">
-          {/* ✅ DM só aparece se estiver logado e não for o próprio perfil */}
-          {currentUser && !isOwnProfile && (
+          {/* ✅ DM só aparece se estiver logado, não for o próprio perfil e forem amigos */}
+          {currentUser && !isOwnProfile && friendState === "friends" && (
             <OpenDMButton toUserId={user.id} />
           )}
 
           {/* Se não estiver logado, botão de login para conversar */}
           {!currentUser && !isOwnProfile && (
-            <Link href={`/auth/login?callbackUrl=${encodeURIComponent(profilePath)}`}>
+            <Link
+              href={`/auth/login?callbackUrl=${encodeURIComponent(
+                profilePath
+              )}`}
+            >
               <Button
                 size="sm"
                 variant="outline"

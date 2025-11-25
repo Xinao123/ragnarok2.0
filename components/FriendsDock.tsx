@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Users,
   UserPlus,
@@ -16,21 +17,15 @@ import { Card, CardContent } from "@/components/ui/card";
 type StatusValue = "ONLINE" | "AWAY" | "BUSY" | "INVISIBLE" | "OFFLINE";
 
 function displayStatus(status: StatusValue, lastSeen?: string | null) {
-  // invisível vira offline pros outros
   if (status === "INVISIBLE") return "OFFLINE";
-
   if (!lastSeen) return status;
 
   const last = new Date(lastSeen).getTime();
   const now = Date.now();
   const diff = now - last;
 
-  // se ficou mais de 5 min sem heartbeat, offline
   if (diff > 5 * 60 * 1000) return "OFFLINE";
-
-  // se tá OFFLINE mas lastSeen recente, consideramos ONLINE
   if (status === "OFFLINE") return "ONLINE";
-
   return status;
 }
 
@@ -79,26 +74,28 @@ type FriendsOverview = {
 type RespondAction = "ACCEPT" | "DECLINE";
 
 export function FriendsDock() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<FriendsOverview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // estados de expandir/minimizar seções
   const [friendsExpanded, setFriendsExpanded] = useState(true);
   const [incomingExpanded, setIncomingExpanded] = useState(true);
   const [outgoingExpanded, setOutgoingExpanded] = useState(true);
 
-  // recarregar dados depois de aceitar/recusar
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // loading de ação (aceitar/recusar)
   const [responding, setResponding] = useState<{
     id: string;
     action: RespondAction;
   } | null>(null);
 
-  // refs para fechar ao clicar fora
+  // ✅ loading individual ao abrir DM
+  const [openingDmId, setOpeningDmId] = useState<string | null>(null);
+
   const panelRef = useRef<HTMLDivElement | null>(null);
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -113,9 +110,7 @@ export function FriendsDock() {
     signal?: AbortSignal,
     opts?: { silent?: boolean }
   ) {
-    if (!opts?.silent) {
-      setLoading(true);
-    }
+    if (!opts?.silent) setLoading(true);
     setError(null);
 
     try {
@@ -140,22 +135,16 @@ export function FriendsDock() {
         setError("Não foi possível carregar os dados agora.");
       }
     } finally {
-      if (!opts?.silent) {
-        setLoading(false);
-      }
+      if (!opts?.silent) setLoading(false);
     }
   }
 
-  // carregar overview + polling quando abrir
   useEffect(() => {
     if (!open) return;
-
     const controller = new AbortController();
 
-    // carrega assim que abrir
     fetchOverview(controller.signal);
 
-    // polling enquanto estiver aberto (15s)
     const interval = setInterval(() => {
       fetchOverview(undefined, { silent: true });
     }, 5000);
@@ -166,13 +155,11 @@ export function FriendsDock() {
     };
   }, [open, refreshKey]);
 
-  // fechar ao clicar fora do painel
   useEffect(() => {
     if (!open) return;
 
     function handlePointerDown(event: MouseEvent | TouchEvent) {
       const target = event.target as Node;
-
       const panel = panelRef.current;
       const toggle = toggleButtonRef.current;
 
@@ -223,9 +210,53 @@ export function FriendsDock() {
     }
   }
 
+  // ✅ abre DM com amigo (manda otherUserId como esperado pelo backend)
+  async function openDmWithFriend(friend: FriendUser) {
+    if (!friend?.id) return;
+
+    setOpeningDmId(friend.id);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/dm/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          otherUserId: friend.id, // ✅ principal
+          toUserId: friend.id,    // ✅ fallback (não custa nada)
+          username: friend.username ?? undefined,
+        }),
+      });
+
+      if (res.status === 401) {
+        router.push(`/auth/login?callbackUrl=${encodeURIComponent(pathname)}`);
+        return;
+      }
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `status ${res.status}`);
+      }
+
+      const json = await res.json();
+      if (!json?.conversationId) {
+        throw new Error("Resposta inválida do servidor.");
+      }
+
+      setOpen(false);
+      router.push(`/dm/${json.conversationId}`);
+    } catch (e: any) {
+      console.error(e);
+      setError(
+        `Falha ao abrir conversa. (${e?.message || "erro desconhecido"})`
+      );
+    } finally {
+      setOpeningDmId(null);
+    }
+  }
+
   return (
     <>
-      {/* Painel flutuante */}
       {open && (
         <div
           ref={panelRef}
@@ -273,7 +304,6 @@ export function FriendsDock() {
                 </span>
               </div>
 
-              {/* Estados gerais */}
               {loading && !data && (
                 <div className="flex items-center gap-2 text-[11px] text-slate-400 py-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -314,10 +344,9 @@ export function FriendsDock() {
                 </p>
               )}
 
-              {/* Conteúdo com seções colapsáveis */}
               {!error && (
                 <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
-                  {/* Seção Amigos */}
+                  {/* Amigos */}
                   <div className="space-y-2">
                     <button
                       type="button"
@@ -366,6 +395,8 @@ export function FriendsDock() {
                                 friend.lastSeen
                               );
 
+                              const opening = openingDmId === friend.id;
+
                               return (
                                 <div
                                   key={friend.id}
@@ -388,7 +419,7 @@ export function FriendsDock() {
                                       <div className="flex items-center gap-2 min-w-0">
                                         <span
                                           className={`h-2 w-2 rounded-full ${statusDotClass(
-                                            s
+                                            s as StatusValue
                                           )} border border-slate-900`}
                                         />
                                         <p className="text-[11px] text-slate-100 truncate">
@@ -404,14 +435,31 @@ export function FriendsDock() {
                                     </div>
                                   </div>
 
-                                  {friend.username && (
-                                    <Link
-                                      href={href}
-                                      className="text-[10px] text-sky-400 hover:text-sky-300 flex-shrink-0"
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {friend.username && (
+                                      <Link
+                                        href={href}
+                                        className="text-[10px] text-sky-400 hover:text-sky-300"
+                                      >
+                                        Ver
+                                      </Link>
+                                    )}
+
+                                    {/* ✅ Botão de DM */}
+                                    <button
+                                      type="button"
+                                      title="Enviar mensagem"
+                                      disabled={opening}
+                                      onClick={() => openDmWithFriend(friend)}
+                                      className="p-1.5 rounded-md border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 disabled:opacity-60"
                                     >
-                                      Ver
-                                    </Link>
-                                  )}
+                                      {opening ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Send className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -423,7 +471,7 @@ export function FriendsDock() {
 
                   <div className="border-t border-slate-800 my-1" />
 
-                  {/* Seção Solicitações recebidas */}
+                  {/* Solicitações recebidas */}
                   <div className="space-y-2">
                     <button
                       type="button"
@@ -546,7 +594,7 @@ export function FriendsDock() {
                     )}
                   </div>
 
-                  {/* Seção Solicitações enviadas */}
+                  {/* Solicitações enviadas */}
                   <div className="space-y-2">
                     <button
                       type="button"
