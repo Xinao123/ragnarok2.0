@@ -17,17 +17,22 @@ import { Card, CardContent } from "@/components/ui/card";
 type StatusValue = "ONLINE" | "AWAY" | "BUSY" | "INVISIBLE" | "OFFLINE";
 
 function displayStatus(status: StatusValue, lastSeen?: string | null) {
+  // invisível vira offline pros outros
   if (status === "INVISIBLE") return "OFFLINE";
+
   if (!lastSeen) return status;
 
   const last = new Date(lastSeen).getTime();
   const now = Date.now();
   const diff = now - last;
 
+  // se ficou mais de 5 min sem heartbeat => offline
   if (diff > 5 * 60 * 1000) return "OFFLINE";
-  if (status === "OFFLINE") return "ONLINE";
+
+  // ✅ não "re-anima" OFFLINE pra ONLINE
   return status;
 }
+
 
 function statusDotClass(s: StatusValue) {
   switch (s) {

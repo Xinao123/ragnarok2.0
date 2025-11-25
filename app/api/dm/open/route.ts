@@ -1,18 +1,16 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const meUser = await getCurrentUser();
-    const me = meUser?.id;
-
-    if (!me) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const me = await getCurrentUser();
+    if (!me?.id) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const otherUserId: string | undefined = body?.otherUserId;
+    const body = await req.json().catch(() => ({}));
+    const otherUserId = body?.otherUserId || body?.toUserId;
 
     if (!otherUserId) {
       return NextResponse.json(
@@ -21,31 +19,46 @@ export async function POST(req: Request) {
       );
     }
 
-    let convo = await prisma.directConversation.findFirst({
-      where: {
-        participants: {
-          some: { userId: me },
-          some: { userId: otherUserId },
-          every: { userId: { in: [me, otherUserId] } },
-        },
-      },
-      include: { participants: true },
-    });
-
-    if (!convo || convo.participants.length !== 2) {
-      convo = await prisma.directConversation.create({
-        data: {
-          participants: {
-            create: [{ userId: me }, { userId: otherUserId }],
-          },
-        },
-        include: { participants: true },
-      });
+    if (otherUserId === me.id) {
+      return NextResponse.json(
+        { error: "cannot open dm with yourself" },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ conversationId: convo.id });
-  } catch (err) {
-    console.error("DM open error:", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const existing = await prisma.directConversation.findFirst({
+      where: {
+        AND: [
+          { participants: { some: { userId: me.id } } },
+          { participants: { some: { userId: otherUserId } } },
+          { participants: { every: { userId: { in: [me.id, otherUserId] } } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return NextResponse.json({ conversationId: existing.id });
+    }
+
+    const created = await prisma.directConversation.create({
+      data: {
+        participants: {
+          create: [
+            { userId: me.id },
+            { userId: otherUserId },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    return NextResponse.json({ conversationId: created.id });
+  } catch (e) {
+    console.error("dm/open error", e);
+    return NextResponse.json(
+      { error: "internal error" },
+      { status: 500 }
+    );
   }
 }

@@ -2,15 +2,15 @@
 
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { signIn, signOut } from "@/auth";
+import { auth, signIn, signOut } from "@/auth";
 import { AuthError } from "next-auth";
-import { redirect } from "next/navigation";  // <--- ADICIONAR
-
+import { redirect } from "next/navigation";
 
 export type AuthFormState = {
   success: boolean;
   errors?: {
     username?: string;
+    email?: string;
     password?: string;
     confirmPassword?: string;
     _form?: string;
@@ -22,10 +22,29 @@ const defaultState: AuthFormState = {
   errors: {},
 };
 
+async function setOnlineByLogin(loginValue: string) {
+  // aceita login por username ou email (mais robusto)
+  const u = await prisma.user.findFirst({
+    where: {
+      OR: [{ username: loginValue }, { email: loginValue }],
+    },
+    select: { id: true },
+  });
+
+  if (!u) return;
+
+  await prisma.user.update({
+    where: { id: u.id },
+    data: {
+      status: "ONLINE",
+      lastSeen: new Date(),
+    },
+  });
+}
 
 export async function registerAction(
   _prevState: AuthFormState = defaultState,
-  formData: FormData,
+  formData: FormData
 ): Promise<AuthFormState> {
   const username = String(formData.get("username") || "").trim();
   const email = String(formData.get("email") || "").trim();
@@ -34,23 +53,17 @@ export async function registerAction(
 
   const errors: AuthFormState["errors"] = {};
 
-  if (!username) {
-    errors.username = "Informe um usuário.";
-  }
+  if (!username) errors.username = "Informe um usuário.";
 
-  if (!email) {
-    errors.email = "Informe um e-mail.";
-  } else if (!email.includes("@") || !email.includes(".")) {
+  if (!email) errors.email = "Informe um e-mail.";
+  else if (!email.includes("@") || !email.includes("."))
     errors.email = "E-mail inválido.";
-  }
 
-  if (password.length < 6) {
+  if (password.length < 6)
     errors.password = "A senha deve ter pelo menos 6 caracteres.";
-  }
 
-  if (password !== confirmPassword) {
+  if (password !== confirmPassword)
     errors.confirmPassword = "As senhas não coincidem.";
-  }
 
   if (Object.keys(errors).length > 0) {
     return { success: false, errors };
@@ -84,10 +97,12 @@ export async function registerAction(
       email,
       name: username,
       passwordHash,
+      status: "ONLINE",
+      lastSeen: new Date(),
     },
   });
 
-  // já loga e redireciona manualmente
+  // já loga
   try {
     await signIn("credentials", {
       redirect: false,
@@ -104,14 +119,15 @@ export async function registerAction(
     throw error;
   }
 
-  // se chegou aqui, login deu certo
+  // garante presença online (redundante com create, mas ok)
+  await setOnlineByLogin(username);
+
   redirect("/");
 }
 
-
 export async function loginAction(
   _prevState: AuthFormState = defaultState,
-  formData: FormData,
+  formData: FormData
 ): Promise<AuthFormState> {
   const username = String(formData.get("username") || "").trim();
   const password = String(formData.get("password") || "");
@@ -147,22 +163,25 @@ export async function loginAction(
     throw error;
   }
 
-  // login ok → redireciona pra home (ou /lobbies se preferir)
+  // ✅ login ok -> marca ONLINE no banco
+  await setOnlineByLogin(username);
+
   redirect("/");
 }
 
-
 export async function logoutAction() {
+  const session = await auth();
+  const meId = (session?.user as any)?.id as string | undefined;
+
+  if (meId) {
+    await prisma.user.update({
+      where: { id: meId },
+      data: {
+        status: "OFFLINE",
+        lastSeen: new Date(),
+      },
+    });
+  }
+
   await signOut({ redirectTo: "/" });
 }
-
-export type AuthFormState = {
-  success: boolean;
-  errors?: {
-    username?: string;
-    email?: string;           // <--- novo
-    password?: string;
-    confirmPassword?: string;
-    _form?: string;
-  };
-};

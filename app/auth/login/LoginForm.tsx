@@ -39,7 +39,7 @@ export function LoginForm() {
         <Input
           id="username"
           name="username"
-          placeholder="ex: cabritinha"
+          placeholder="ex: samoano"
           className="bg-slate-950/60 border-slate-700"
           required
         />
