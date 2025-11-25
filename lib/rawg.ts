@@ -11,6 +11,19 @@ export type RawgGame = {
   platforms?: {
     platform: { id: number; name: string; slug: string };
   }[];
+  parent_platforms?: {
+    platform: { id: number; name: string; slug: string };
+  }[];
+  genres?: {
+    id: number;
+    name: string;
+    slug: string;
+  }[];
+  tags?: {
+    id: number;
+    name: string;
+    slug: string;
+  }[];
 };
 
 export type RawgGamesResponse = {
@@ -20,7 +33,10 @@ export type RawgGamesResponse = {
   previous: string | null;
 };
 
-function buildUrl(path: string, params: Record<string, string | number | undefined>) {
+function buildUrl(
+  path: string,
+  params: Record<string, string | number | undefined>
+) {
   const url = new URL(`${RAWG_BASE}${path}`);
   url.searchParams.set("key", process.env.RAWG_API_KEY || "");
 
@@ -37,10 +53,9 @@ async function rawgGet<T>(path: string, params: Record<string, any>) {
   const url = buildUrl(path, params);
 
   const res = await fetch(url, {
-    // cache leve pra não estourar limite
-    next: { revalidate: 60 * 60 }, // 1h
+    next: { revalidate: 60 * 60 }, // 1h de cache leve
     headers: {
-      "User-Agent": "Ragnarok2.0/1.0 (+https://seuapp)", // RAWG recomenda identificar app :contentReference[oaicite:2]{index=2}
+      "User-Agent": "Ragnarok2.0/1.0 (+https://seuapp)",
     },
   });
 
@@ -52,14 +67,27 @@ async function rawgGet<T>(path: string, params: Record<string, any>) {
   return (await res.json()) as T;
 }
 
-export function getTrendingGames(page = 1, pageSize = 12) {
-  // ordering=-added (mais “trending/anticipados”) :contentReference[oaicite:3]{index=3}
+/**
+ * Jogos online / multiplayer em destaque.
+ * Filtra por tags multiplayer/online/co-op e ordena pelos melhor avaliados.
+ */
+export function getOnlineGames(page = 1, pageSize = 12) {
   return rawgGet<RawgGamesResponse>("/games", {
-    ordering: "-added",
+    tags: "multiplayer,online,co-op",
+    ordering: "-rating",
     page,
     page_size: pageSize,
   });
 }
+
+// (se quiser manter, pode deixar a função de trending)
+// export function getTrendingGames(page = 1, pageSize = 12) {
+//   return rawgGet<RawgGamesResponse>("/games", {
+//     ordering: "-added",
+//     page,
+//     page_size: pageSize,
+//   });
+// }
 
 export function searchGames(search: string, page = 1, pageSize = 12) {
   return rawgGet<RawgGamesResponse>("/games", {
