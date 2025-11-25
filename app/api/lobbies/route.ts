@@ -1,37 +1,55 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
-import { leaveLobby } from "@/lib/lobbies";
+import { prisma } from "@/lib/prisma";
+import { LobbyStatus, MemberStatus } from "@prisma/client";
 
-export async function POST(
-  _req: any,
-  { params }: { params: Promise<{ lobbyId: string }> }
-) {
+// Lista lobbys (opcional, mas útil pra futuras integrações)
+export async function GET(_req: Request) {
   try {
-    const { lobbyId } = await params;
+    const lobbies = await prisma.lobby.findMany({
+      where: {
+        status: {
+          in: [LobbyStatus.OPEN, LobbyStatus.FULL],
+        },
+      },
+      include: {
+        game: true,
+        owner: {
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            avatarUrl: true,
+          },
+        },
+        members: {
+          where: { status: MemberStatus.ACTIVE },
+          select: {
+            userId: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-    const user = await getCurrentUser();
-    if (!user?.id) {
-      return NextResponse.json(
-        { error: "Não autenticado." },
-        { status: 401 }
-      );
-    }
-
-    if (!lobbyId) {
-      return NextResponse.json(
-        { error: "lobbyId é obrigatório." },
-        { status: 400 }
-      );
-    }
-
-    await leaveLobby(lobbyId, user.id);
-
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return NextResponse.json({ lobbies }, { status: 200 });
   } catch (e) {
-    console.error("POST /api/lobbies/[lobbyId]/leave error:", e);
+    console.error("GET /api/lobbies error:", e);
     return NextResponse.json(
-      { error: "Falha ao sair do lobby." },
+      { error: "Falha ao listar lobbys." },
       { status: 500 }
     );
   }
+}
+
+// POST aqui não é mais usado — toda criação acontece via Server Action em /lobbies.
+// Mantemos apenas um stub com assinatura compatível para não dar erro de tipo.
+export async function POST(_req: Request, _ctx: any) {
+  return NextResponse.json(
+    {
+      error:
+        "Criação de lobby via /api/lobbies está desativada. Use a página /lobbies (Server Actions).",
+    },
+    { status: 405 }
+  );
 }
