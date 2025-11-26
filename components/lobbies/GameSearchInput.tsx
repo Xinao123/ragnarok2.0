@@ -20,6 +20,22 @@ type RawgResult = {
   genres: string[];
 };
 
+type SelectedGame =
+  | {
+      source: "db";
+      id: string;
+      name: string;
+      platform: string;
+      backgroundImageUrl?: string | null;
+    }
+  | {
+      source: "rawg";
+      rawgId: number;
+      name: string;
+      platform: string;
+      image?: string | null;
+    };
+
 type Props = {
   initialGames: InitialGame[];
 };
@@ -29,20 +45,26 @@ export function GameSearchInput({ initialGames }: Props) {
   const [results, setResults] = useState<RawgResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedGame, setSelectedGame] = useState<InitialGame | null>(null);
+  const [selectedGame, setSelectedGame] = useState<SelectedGame | null>(null);
   const [open, setOpen] = useState(false);
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // quando o usuário selecionar um jogo dos "recentes" do banco
+  // selecionar jogo já salvo no banco
   function selectExistingGame(game: InitialGame) {
-    setSelectedGame(game);
+    setSelectedGame({
+      source: "db",
+      id: game.id,
+      name: game.name,
+      platform: game.platform,
+      backgroundImageUrl: game.backgroundImageUrl,
+    });
     setSearch(game.name);
     setOpen(false);
   }
 
-  // Buscar na RAWG com debounce
+  // buscar jogos na RAWG (debounce)
   useEffect(() => {
     if (!search || search.trim().length < 2) {
       setResults([]);
@@ -63,7 +85,9 @@ export function GameSearchInput({ initialGames }: Props) {
         setError(null);
 
         const res = await fetch(
-          `/api/games/search-rawg?q=${encodeURIComponent(search.trim())}`,
+          `/api/games/search-rawg?q=${encodeURIComponent(
+            search.trim()
+          )}`,
           { signal: controller.signal }
         );
 
@@ -76,9 +100,6 @@ export function GameSearchInput({ initialGames }: Props) {
         }
 
         const data = await res.json();
-
-        // 🔴 Aqui estava o bug clássico em muita implementação:
-        // usar data.games em vez de data.results
         const rawResults: RawgResult[] = data.results ?? [];
         setResults(rawResults);
       } catch (e: any) {
@@ -97,54 +118,57 @@ export function GameSearchInput({ initialGames }: Props) {
     };
   }, [search]);
 
-  // Quando clicar num resultado da RAWG: salvar no banco e setar gameId
-  async function handleSelectRawg(result: RawgResult) {
-    try {
-      setError(null);
+  // selecionar um jogo vindo da RAWG
+  function handleSelectRawg(result: RawgResult) {
+    const platform =
+      result.platforms && result.platforms.length > 0
+        ? result.platforms[0]
+        : "Multi";
 
-      const res = await fetch("/api/games/ensure-from-rawg", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rawgId: result.id,
-          name: result.name,
-          backgroundImageUrl: result.backgroundImage,
-          platforms: result.platforms,
-          genres: result.genres,
-        }),
-      });
+    setSelectedGame({
+      source: "rawg",
+      rawgId: result.id,
+      name: result.name,
+      platform,
+      image: result.backgroundImage,
+    });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        console.error("ensure-from-rawg error:", res.status, text);
-        setError("Não foi possível salvar o jogo. Tente novamente.");
-        return;
-      }
-
-      const json = await res.json();
-      const game = json.game as InitialGame;
-
-      setSelectedGame({
-        id: game.id,
-        name: game.name,
-        platform: game.platform,
-        backgroundImageUrl: game.backgroundImageUrl,
-      });
-      setSearch(game.name);
-      setOpen(false);
-    } catch (e) {
-      console.error("handleSelectRawg exception:", e);
-      setError("Erro ao selecionar jogo.");
-    }
+    setSearch(result.name);
+    setOpen(false);
   }
+
+  // valores dos campos hidden pro form
+  const gameIdHidden =
+    selectedGame?.source === "db" ? selectedGame.id : "";
+  const rawgIdHidden =
+    selectedGame?.source === "rawg"
+      ? String(selectedGame.rawgId)
+      : "";
+  const rawgNameHidden =
+    selectedGame?.source === "rawg" ? selectedGame.name : "";
+  const rawgPlatformHidden = selectedGame
+    ? selectedGame.platform
+    : "";
+  const rawgImageHidden =
+    selectedGame?.source === "rawg"
+      ? selectedGame.image || ""
+      : "";
 
   return (
     <div className="space-y-1 relative">
-      {/* hidden para o server action */}
+      {/* hidden inputs usados pelo server action */}
+      <input type="hidden" name="gameId" value={gameIdHidden} />
+      <input type="hidden" name="rawgId" value={rawgIdHidden} />
+      <input type="hidden" name="rawgName" value={rawgNameHidden} />
       <input
         type="hidden"
-        name="gameId"
-        value={selectedGame?.id ?? ""}
+        name="rawgPlatform"
+        value={rawgPlatformHidden}
+      />
+      <input
+        type="hidden"
+        name="rawgImage"
+        value={rawgImageHidden}
       />
 
       <label className="text-[11px] text-slate-300">
@@ -179,7 +203,9 @@ export function GameSearchInput({ initialGames }: Props) {
           <p className="text-[11px] text-emerald-300">
             Jogo selecionado:{" "}
             <span className="font-medium text-emerald-200">
-              {selectedGame.name}
+              {selectedGame.source === "db"
+                ? selectedGame.name
+                : selectedGame.name}
             </span>{" "}
             <span className="text-emerald-400/80">
               ({selectedGame.platform || "Multi"})
