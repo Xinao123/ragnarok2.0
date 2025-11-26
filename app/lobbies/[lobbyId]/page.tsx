@@ -1,24 +1,45 @@
+// app/lobbies/[lobbyId]/page.tsx  (ou [id], tanto faz o nome da pasta)
 import { prisma } from "@/lib/prisma";
 import { MemberStatus } from "@prisma/client";
 
 type PageProps = {
-  params: { lobbyId?: string }; // <- pode vir undefined, então deixamos opcional
+  params: Record<string, string | string[]>;
 };
 
-export default async function LobbyDetailPage({ params }: PageProps) {
-  const lobbyId = params?.lobbyId;
+// Função genérica pra achar o ID a partir de qualquer chave de params
+function resolveLobbyId(params: Record<string, string | string[]>): string | null {
+  if (!params) return null;
 
-  // Se o ID não veio, nem tenta bater no banco
-  if (!lobbyId || typeof lobbyId !== "string") {
+  const keys = Object.keys(params);
+  if (keys.length === 0) return null;
+
+  const key = keys[0]; // pega o primeiro param dinâmico da rota
+  const raw = params[key];
+
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  if (typeof raw === "string") return raw;
+
+  return String(raw);
+}
+
+export default async function LobbyDetailPage({ params }: PageProps) {
+  const lobbyId = resolveLobbyId(params);
+
+  // Se não conseguimos resolver um ID, nem toca no banco
+  if (!lobbyId) {
     return (
       <div className="p-6 space-y-3">
         <h1 className="text-xl font-semibold">Lobby inválido</h1>
         <p className="text-sm text-slate-400">
           O identificador deste lobby não é válido.
         </p>
-        <p className="text-xs font-mono text-slate-300 bg-slate-950/80 border border-slate-800 rounded px-2 py-1 inline-block">
-          lobbyId: {String(lobbyId)}
-        </p>
+
+        <div className="mt-3">
+          <p className="text-xs text-slate-500 mb-1">Debug params:</p>
+          <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
+            {JSON.stringify(params, null, 2)}
+          </pre>
+        </div>
       </div>
     );
   }
@@ -36,7 +57,6 @@ export default async function LobbyDetailPage({ params }: PageProps) {
       },
     });
 
-    // Se não existir lobby com esse ID:
     if (!lobby) {
       return (
         <div className="p-6 space-y-3">
@@ -47,6 +67,13 @@ export default async function LobbyDetailPage({ params }: PageProps) {
           <p className="text-xs font-mono text-slate-300 bg-slate-950/80 border border-slate-800 rounded px-2 py-1 inline-block">
             {lobbyId}
           </p>
+
+          <div className="mt-3">
+            <p className="text-xs text-slate-500 mb-1">Debug params:</p>
+            <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
+              {JSON.stringify(params, null, 2)}
+            </pre>
+          </div>
         </div>
       );
     }
@@ -125,13 +152,14 @@ export default async function LobbyDetailPage({ params }: PageProps) {
           )}
         </section>
 
-        {/* Bloco de debug — pode remover depois */}
-        <section className="mt-4">
-          <p className="text-xs text-slate-500 mb-1">
-            Debug (JSON do lobby) — apenas para desenvolvimento:
+        {/* Debug extra pra garantir o que está vindo de params / lobbyId */}
+        <section className="mt-4 space-y-2">
+          <p className="text-xs text-slate-500">
+            Debug – param resolvido:{" "}
+            <span className="font-mono">{lobbyId}</span>
           </p>
           <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
-            {JSON.stringify(lobby, null, 2)}
+            {JSON.stringify(params, null, 2)}
           </pre>
         </section>
       </div>
@@ -149,6 +177,13 @@ export default async function LobbyDetailPage({ params }: PageProps) {
           <p className="text-xs font-mono text-red-300 break-words">
             {e?.message ?? String(e)}
           </p>
+        </div>
+
+        <div className="mt-3">
+          <p className="text-xs text-slate-500 mb-1">Debug params:</p>
+          <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
+            {JSON.stringify(params, null, 2)}
+          </pre>
         </div>
       </div>
     );
