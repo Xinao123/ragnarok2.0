@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { GameSearchInput } from "@/components/lobbies/GameSearchInput";
 
 /* SERVER ACTIONS ===================================================== */
-
 async function createLobbyAction(formData: FormData) {
   "use server";
 
@@ -28,13 +27,7 @@ async function createLobbyAction(formData: FormData) {
     redirect("/auth/login");
   }
 
-  // Dados do jogo vindos do form (GameSearchInput)
-  const gameIdRaw = String(formData.get("gameId") || "").trim();
-  const rawgIdRaw = String(formData.get("rawgId") || "").trim();
-  const rawgName = String(formData.get("rawgName") || "").trim();
-  const rawgPlatform = String(formData.get("rawgPlatform") || "").trim();
-  const rawgImage = String(formData.get("rawgImage") || "").trim();
-
+  const gameId = String(formData.get("gameId") || "").trim();
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const maxPlayersRaw = formData.get("maxPlayers");
@@ -43,8 +36,7 @@ async function createLobbyAction(formData: FormData) {
 
   const maxPlayers = Number(maxPlayersRaw);
 
-  // validações base
-  if (!gameIdRaw && !rawgIdRaw) {
+  if (!gameId) {
     throw new Error("Selecione um jogo para o lobby.");
   }
   if (!title) {
@@ -54,49 +46,7 @@ async function createLobbyAction(formData: FormData) {
     throw new Error("O número de vagas deve ser entre 2 e 16.");
   }
 
-  await prisma.$transaction(async (tx) => {
-    // 1) garantir o Game no banco: ou usa o id vindo do banco,
-    //    ou cria/atualiza a partir dos dados RAWG
-    let gameId: string;
-
-    if (gameIdRaw) {
-      const game = await tx.game.findUnique({
-        where: { id: gameIdRaw },
-      });
-      if (!game) {
-        throw new Error("Jogo selecionado não foi encontrado.");
-      }
-      gameId = game.id;
-    } else {
-      const rawgIdNum = Number(rawgIdRaw);
-      if (!rawgName || Number.isNaN(rawgIdNum)) {
-        throw new Error("Dados de jogo inválidos.");
-      }
-
-      const slug = String(rawgIdNum);
-      const platform = rawgPlatform || "Multi";
-
-      const game = await tx.game.upsert({
-        where: { slug },
-        update: {
-          name: rawgName,
-          platform,
-          // se o seu Game tiver esse campo no schema, descomenta:
-          // backgroundImageUrl: rawgImage || null,
-        },
-        create: {
-          name: rawgName,
-          slug,
-          platform,
-          // se tiver no schema:
-          // backgroundImageUrl: rawgImage || null,
-        },
-      });
-
-      gameId = game.id;
-    }
-
-    // 2) cria o lobby
+  const lobbyId = await prisma.$transaction(async (tx) => {
     const lobby = await tx.lobby.create({
       data: {
         title,
@@ -110,7 +60,6 @@ async function createLobbyAction(formData: FormData) {
       },
     });
 
-    // 3) adiciona o criador como líder
     await tx.lobbyMember.create({
       data: {
         lobbyId: lobby.id,
@@ -119,9 +68,13 @@ async function createLobbyAction(formData: FormData) {
         status: MemberStatus.ACTIVE,
       },
     });
+
+    return lobby.id;
   });
 
+  // atualiza lista de lobbies e vai direto pra página do lobby
   revalidatePath("/lobbies");
+  redirect(`/lobbies/${lobbyId}`);
 }
 
 async function joinLobbyAction(formData: FormData) {
@@ -187,6 +140,7 @@ async function joinLobbyAction(formData: FormData) {
   });
 
   revalidatePath("/lobbies");
+  redirect(`/lobbies/${lobbyId}`);
 }
 
 async function leaveLobbyAction(formData: FormData) {
@@ -253,6 +207,8 @@ async function leaveLobbyAction(formData: FormData) {
   });
 
   revalidatePath("/lobbies");
+  // depois de sair, volta pra listagem
+  redirect("/lobbies");
 }
 
 /* PAGE =============================================================== */
