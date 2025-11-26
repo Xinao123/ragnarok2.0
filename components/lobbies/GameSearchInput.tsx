@@ -46,27 +46,23 @@ export function GameSearchInput({ initialGames }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<SelectedGame | null>(null);
-  const [open, setOpen] = useState(false);
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // selecionar jogo já salvo no banco
-  function selectExistingGame(game: InitialGame) {
-    setSelectedGame({
-      source: "db",
-      id: game.id,
-      name: game.name,
-      platform: game.platform,
-      backgroundImageUrl: game.backgroundImageUrl,
-    });
-    setSearch(game.name);
-    setOpen(false);
-  }
+  // filtra jogos já salvos no banco conforme digita
+  const filteredInitial = search.trim()
+    ? initialGames.filter((g) =>
+        g.name.toLowerCase().includes(search.toLowerCase())
+      )
+    : initialGames;
 
-  // buscar jogos na RAWG (debounce)
+  // buscar jogos na RAWG conforme o usuário digita
   useEffect(() => {
-    if (!search || search.trim().length < 2) {
+    const term = search.trim();
+
+    // se limpar o campo, não busca na RAWG
+    if (!term) {
       setResults([]);
       setError(null);
       setLoading(false);
@@ -85,9 +81,7 @@ export function GameSearchInput({ initialGames }: Props) {
         setError(null);
 
         const res = await fetch(
-          `/api/games/search-rawg?q=${encodeURIComponent(
-            search.trim()
-          )}`,
+          `/api/games/search-rawg?q=${encodeURIComponent(term)}`,
           { signal: controller.signal }
         );
 
@@ -110,7 +104,7 @@ export function GameSearchInput({ initialGames }: Props) {
       } finally {
         setLoading(false);
       }
-    }, 400);
+    }, 400); // debounce
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -118,7 +112,19 @@ export function GameSearchInput({ initialGames }: Props) {
     };
   }, [search]);
 
-  // selecionar um jogo vindo da RAWG
+  // selecionar jogo já salvo no banco
+  function selectExistingGame(game: InitialGame) {
+    setSelectedGame({
+      source: "db",
+      id: game.id,
+      name: game.name,
+      platform: game.platform,
+      backgroundImageUrl: game.backgroundImageUrl,
+    });
+    setSearch(game.name);
+  }
+
+  // selecionar jogo vindo da RAWG
   function handleSelectRawg(result: RawgResult) {
     const platform =
       result.platforms && result.platforms.length > 0
@@ -134,10 +140,9 @@ export function GameSearchInput({ initialGames }: Props) {
     });
 
     setSearch(result.name);
-    setOpen(false);
   }
 
-  // valores dos campos hidden pro form
+  // valores dos campos hidden pro form (server action)
   const gameIdHidden =
     selectedGame?.source === "db" ? selectedGame.id : "";
   const rawgIdHidden =
@@ -155,7 +160,7 @@ export function GameSearchInput({ initialGames }: Props) {
       : "";
 
   return (
-    <div className="space-y-1 relative">
+    <div className="space-y-1">
       {/* hidden inputs usados pelo server action */}
       <input type="hidden" name="gameId" value={gameIdHidden} />
       <input type="hidden" name="rawgId" value={rawgIdHidden} />
@@ -176,36 +181,21 @@ export function GameSearchInput({ initialGames }: Props) {
       </label>
 
       <div className="flex flex-col gap-1">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            placeholder="Busque pelo nome do jogo (ex: VALORANT, CS2, LoL...)"
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="text-[11px]"
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? "Fechar" : "Ver jogos"}
-          </Button>
-        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+          }}
+          placeholder="Digite o nome do jogo (ex: VALORANT, CS2, LoL...)"
+          className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+        />
 
         {selectedGame && (
           <p className="text-[11px] text-emerald-300">
             Jogo selecionado:{" "}
             <span className="font-medium text-emerald-200">
-              {selectedGame.source === "db"
-                ? selectedGame.name
-                : selectedGame.name}
+              {selectedGame.name}
             </span>{" "}
             <span className="text-emerald-400/80">
               ({selectedGame.platform || "Multi"})
@@ -218,90 +208,94 @@ export function GameSearchInput({ initialGames }: Props) {
         )}
       </div>
 
-      {/* dropdown de resultados */}
-      {open && (
-        <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/95 shadow-xl max-h-72 overflow-y-auto custom-scroll">
-          {/* Jogos recentes do banco */}
-          {initialGames.length > 0 && (
-            <div className="border-b border-slate-800 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
-                Jogos recentes
-              </p>
-              <div className="space-y-1">
-                {initialGames.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    onClick={() => selectExistingGame(g)}
-                    className="w-full text-left text-[11px] px-2 py-1 rounded-md hover:bg-slate-800/80 flex flex-col"
-                  >
-                    <span className="text-slate-100">{g.name}</span>
-                    <span className="text-[10px] text-slate-500">
-                      {g.platform}
-                    </span>
-                  </button>
-                ))}
-              </div>
+      {/* LISTA DE SUGESTÕES (sempre visível, muda conforme digita) */}
+      <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/95 shadow-inner max-h-72 overflow-y-auto custom-scroll">
+        {/* Jogos do banco (filtrados pelo que foi digitado) */}
+        {filteredInitial.length > 0 && (
+          <div className="border-b border-slate-800 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+              Jogos salvos
+            </p>
+            <div className="space-y-1">
+              {filteredInitial.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => selectExistingGame(g)}
+                  className="w-full text-left text-[11px] px-2 py-1 rounded-md hover:bg-slate-800/80 flex flex-col"
+                >
+                  <span className="text-slate-100">{g.name}</span>
+                  <span className="text-[10px] text-slate-500">
+                    {g.platform}
+                  </span>
+                </button>
+              ))}
             </div>
+          </div>
+        )}
+
+        {/* Resultados da RAWG (conforme digita) */}
+        <div className="px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+            Resultados da RAWG
+          </p>
+
+          {!search.trim() && (
+            <p className="text-[11px] text-slate-500">
+              Comece a digitar para buscar jogos online.
+            </p>
           )}
 
-          {/* resultados RAWG */}
-          <div className="px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
-              Resultados da RAWG
+          {search.trim() && loading && (
+            <p className="text-[11px] text-slate-400">
+              Buscando jogos para &quot;{search}&quot;...
             </p>
+          )}
 
-            {loading && (
-              <p className="text-[11px] text-slate-400">
-                Buscando jogos...
-              </p>
-            )}
+          {search.trim() && !loading && results.length === 0 && !error && (
+            <p className="text-[11px] text-slate-500">
+              Nenhum jogo encontrado para &quot;{search}&quot;.
+            </p>
+          )}
 
-            {!loading && results.length === 0 && search.length >= 2 && (
-              <p className="text-[11px] text-slate-500">
-                Nenhum jogo encontrado para &quot;{search}&quot;.
-              </p>
-            )}
-
-            {!loading && results.length > 0 && (
-              <div className="space-y-1">
-                {results.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => handleSelectRawg(r)}
-                    className="w-full text-left text-[11px] px-2 py-1.5 rounded-md hover:bg-slate-800/80 flex gap-2"
-                  >
-                    {r.backgroundImage && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={r.backgroundImage}
-                        alt={r.name}
-                        className="h-10 w-16 rounded-md object-cover flex-shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-slate-100 truncate">
-                        {r.name}
-                      </p>
-                      <p className="text-[10px] text-slate-500 truncate">
-                        {r.platforms.join(", ") || "Multi"}
-                      </p>
-                      <p className="text-[10px] text-slate-500">
-                        {r.released
-                          ? `Lançado em ${new Date(
-                              r.released
-                            ).toLocaleDateString("pt-BR")}`
-                          : "Data de lançamento desconhecida"}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {!loading && results.length > 0 && (
+            <div className="space-y-1">
+              {results.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => handleSelectRawg(r)}
+                  className="w-full text-left text-[11px] px-2 py-1.5 rounded-md hover:bg-slate-800/80 flex gap-2"
+                >
+                  {r.backgroundImage && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={r.backgroundImage}
+                      alt={r.name}
+                      className="h-10 w-16 rounded-md object-cover flex-shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-slate-100 truncate">
+                      {r.name}
+                    </p>
+                    <p className="text-[10px] text-slate-500 truncate">
+                      {r.platforms.join(", ") || "Multi"}
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      {r.released
+                        ? `Lançado em ${new Date(
+                            r.released
+                          ).toLocaleDateString("pt-BR")}`
+                        : "Data de lançamento desconhecida"}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <style jsx>{`
         .custom-scroll::-webkit-scrollbar {
