@@ -36,12 +36,8 @@ services:
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@db:5432/ragnarok"
       NODE_ENV: "production"
-      # Adicione aqui outras variáveis que seu app usa, se necessário:
-      # NEXTAUTH_URL: "http://SEU_IP_OU_DOMINIO"
-      # NEXT_PUBLIC_SOCKET_URL: "http://SEU_IP_OU_DOMINIO:4000"
-      # MINIO_ENDPOINT: "http://minio:9000"
-      # MINIO_ACCESS_KEY: "minio"
-      # MINIO_SECRET_KEY: "minio123"
+      NEXTAUTH_URL: "http://192.168.0.111:8080"
+      AUTH_TRUST_HOST: "true"
     depends_on:
       - db
       - minio
@@ -76,7 +72,7 @@ services:
     depends_on:
       - app
     ports:
-      - "8080:80"
+      - "80:80"
     restart: unless-stopped
 
 volumes:
