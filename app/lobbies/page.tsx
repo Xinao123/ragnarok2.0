@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { GameSearchInput } from "@/components/lobbies/GameSearchInput";
 
 /* SERVER ACTIONS ===================================================== */
+
 async function createLobbyAction(formData: FormData) {
   "use server";
 
@@ -72,7 +73,6 @@ async function createLobbyAction(formData: FormData) {
     return lobby.id;
   });
 
-  // atualiza lista de lobbies e vai direto pra página do lobby
   revalidatePath("/lobbies");
   redirect(`/lobbies/${lobbyId}`);
 }
@@ -207,9 +207,9 @@ async function leaveLobbyAction(formData: FormData) {
   });
 
   revalidatePath("/lobbies");
-  // depois de sair, volta pra listagem
   redirect("/lobbies");
 }
+
 
 /* PAGE =============================================================== */
 
