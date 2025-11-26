@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 
-type DbGame = {
+type InitialGame = {
   id: string;
   name: string;
   platform: string;
-  backgroundImageUrl: string | null;
+  backgroundImageUrl?: string | null;
 };
 
-type RawgSearchResult = {
+type RawgResult = {
   id: number;
   name: string;
   backgroundImage: string | null;
@@ -19,236 +20,275 @@ type RawgSearchResult = {
   genres: string[];
 };
 
-type GameSearchInputProps = {
-  name?: string; // nome do campo hidden (gameId)
-  initialGames: DbGame[];
+type Props = {
+  initialGames: InitialGame[];
 };
 
-export function GameSearchInput({
-  name = "gameId",
-  initialGames,
-}: GameSearchInputProps) {
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<RawgSearchResult[]>([]);
+export function GameSearchInput({ initialGames }: Props) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<RawgResult[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedGame, setSelectedGame] = useState<InitialGame | null>(null);
+  const [open, setOpen] = useState(false);
 
-  const [selectedGame, setSelectedGame] = useState<DbGame | null>(null);
-  const [importingId, setImportingId] = useState<number | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  async function handleSearch(e?: React.FormEvent) {
-    e?.preventDefault();
-    const term = query.trim();
-    if (term.length < 2) {
-      setError("Digite pelo menos 2 caracteres para buscar.");
+  // quando o usuário selecionar um jogo dos "recentes" do banco
+  function selectExistingGame(game: InitialGame) {
+    setSelectedGame(game);
+    setSearch(game.name);
+    setOpen(false);
+  }
+
+  // Buscar na RAWG com debounce
+  useEffect(() => {
+    if (!search || search.trim().length < 2) {
       setResults([]);
+      setError(null);
+      setLoading(false);
       return;
     }
 
-    try {
-      setSearching(true);
-      setError(null);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-      const res = await fetch(
-        `/api/games/search-rawg?q=${encodeURIComponent(term)}`
-      );
+    timeoutRef.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-      if (!res.ok) {
-        throw new Error("Falha ao buscar jogos na RAWG.");
+      try {
+        setLoading(true);
+        setError(null);
+
+        const res = await fetch(
+          `/api/games/search-rawg?q=${encodeURIComponent(search.trim())}`,
+          { signal: controller.signal }
+        );
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          console.error("RAWG search error:", res.status, text);
+          setError("Falha ao buscar jogos.");
+          setResults([]);
+          return;
+        }
+
+        const data = await res.json();
+
+        // 🔴 Aqui estava o bug clássico em muita implementação:
+        // usar data.games em vez de data.results
+        const rawResults: RawgResult[] = data.results ?? [];
+        setResults(rawResults);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        console.error("RAWG search exception:", e);
+        setError("Erro ao buscar jogos.");
+        setResults([]);
+      } finally {
+        setLoading(false);
       }
+    }, 400);
 
-      const data = await res.json();
-      setResults(data.results ?? []);
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || "Erro ao buscar jogos.");
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      abortRef.current?.abort();
+    };
+  }, [search]);
 
-  async function handleImport(rawgGame: RawgSearchResult) {
+  // Quando clicar num resultado da RAWG: salvar no banco e setar gameId
+  async function handleSelectRawg(result: RawgResult) {
     try {
-      setImportingId(rawgGame.id);
       setError(null);
 
-      const res = await fetch("/api/games/import-from-rawg", {
+      const res = await fetch("/api/games/ensure-from-rawg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawgId: rawgGame.id }),
+        body: JSON.stringify({
+          rawgId: result.id,
+          name: result.name,
+          backgroundImageUrl: result.backgroundImage,
+          platforms: result.platforms,
+          genres: result.genres,
+        }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data?.error || "Erro ao importar jogo.");
+        const text = await res.text().catch(() => "");
+        console.error("ensure-from-rawg error:", res.status, text);
+        setError("Não foi possível salvar o jogo. Tente novamente.");
+        return;
       }
 
-      const game = data.game as DbGame;
+      const json = await res.json();
+      const game = json.game as InitialGame;
+
       setSelectedGame({
         id: game.id,
         name: game.name,
         platform: game.platform,
-        backgroundImageUrl: game.backgroundImageUrl ?? null,
+        backgroundImageUrl: game.backgroundImageUrl,
       });
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || "Erro ao importar jogo.");
-    } finally {
-      setImportingId(null);
+      setSearch(game.name);
+      setOpen(false);
+    } catch (e) {
+      console.error("handleSelectRawg exception:", e);
+      setError("Erro ao selecionar jogo.");
     }
   }
 
-  function handleSelectExisting(game: DbGame) {
-    setSelectedGame(game);
-  }
-
   return (
-    <div className="space-y-2">
-      {/* hidden com o gameId selecionado (usado pelo form do lobby) */}
+    <div className="space-y-1 relative">
+      {/* hidden para o server action */}
       <input
         type="hidden"
-        name={name}
+        name="gameId"
         value={selectedGame?.id ?? ""}
       />
 
-      <div className="space-y-1">
-        <label className="text-[11px] text-slate-300">Jogo</label>
-        <form onSubmit={handleSearch} className="flex gap-2">
+      <label className="text-[11px] text-slate-300">
+        Jogo do lobby
+      </label>
+
+      <div className="flex flex-col gap-1">
+        <div className="flex gap-2">
           <input
             type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por nome do jogo (ex: Valorant, CS2, LoL...)"
-            className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder="Busque pelo nome do jogo (ex: VALORANT, CS2, LoL...)"
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
           />
-          <button
-            type="submit"
-            className="rounded-md bg-sky-600 hover:bg-sky-500 px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-60"
-            disabled={searching}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="text-[11px]"
+            onClick={() => setOpen((v) => !v)}
           >
-            {searching ? "Buscando..." : "Buscar"}
-          </button>
-        </form>
-        <p className="text-[10px] text-slate-500">
-          Os resultados vêm da RAWG.io. Ao escolher um jogo, ele é salvo no seu
-          banco para usar em futuros lobbies.
-        </p>
-      </div>
+            {open ? "Fechar" : "Ver jogos"}
+          </Button>
+        </div>
 
-      {/* jogo selecionado */}
-      <div className="rounded-lg border border-slate-800 bg-slate-950/80 p-2 flex gap-2 items-center">
-        {selectedGame?.backgroundImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={selectedGame.backgroundImageUrl}
-            alt={selectedGame.name}
-            className="h-10 w-16 rounded-md object-cover"
-          />
-        ) : (
-          <div className="h-10 w-16 rounded-md bg-slate-800 flex items-center justify-center text-[10px] text-slate-500">
-            Jogo
-          </div>
+        {selectedGame && (
+          <p className="text-[11px] text-emerald-300">
+            Jogo selecionado:{" "}
+            <span className="font-medium text-emerald-200">
+              {selectedGame.name}
+            </span>{" "}
+            <span className="text-emerald-400/80">
+              ({selectedGame.platform || "Multi"})
+            </span>
+          </p>
         )}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-slate-100 truncate">
-            {selectedGame ? selectedGame.name : "Nenhum jogo selecionado ainda"}
-          </p>
-          <p className="text-[10px] text-slate-400">
-            {selectedGame
-              ? selectedGame.platform
-              : "Use a busca acima ou escolha um jogo recente."}
-          </p>
-        </div>
+
+        {error && (
+          <p className="text-[11px] text-rose-300">{error}</p>
+        )}
       </div>
 
-      {/* jogos usados recentemente */}
-      {initialGames.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[10px] text-slate-500">
-            Jogos usados recentemente:
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {initialGames.slice(0, 8).map((g) => {
-              const isActive = selectedGame?.id === g.id;
-              return (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => handleSelectExisting(g)}
-                  className={`rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
-                    isActive
-                      ? "border-sky-500 bg-sky-500/20 text-sky-100"
-                      : "border-slate-700 bg-slate-900/80 text-slate-300 hover:border-sky-500 hover:text-sky-200"
-                  }`}
-                >
-                  {g.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* dropdown de resultados */}
+      {open && (
+        <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/95 shadow-xl max-h-72 overflow-y-auto custom-scroll">
+          {/* Jogos recentes do banco */}
+          {initialGames.length > 0 && (
+            <div className="border-b border-slate-800 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+                Jogos recentes
+              </p>
+              <div className="space-y-1">
+                {initialGames.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => selectExistingGame(g)}
+                    className="w-full text-left text-[11px] px-2 py-1 rounded-md hover:bg-slate-800/80 flex flex-col"
+                  >
+                    <span className="text-slate-100">{g.name}</span>
+                    <span className="text-[10px] text-slate-500">
+                      {g.platform}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-      {/* resultados da RAWG */}
-      {results.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[10px] text-slate-500">
-            Resultados da RAWG para &quot;{query}&quot;:
-          </p>
-          <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/90 p-2 space-y-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/60">
-            {results.map((r) => {
-              const isImporting = importingId === r.id;
-              return (
-                <div
-                  key={r.id}
-                  className="flex items-center gap-2 rounded-md bg-slate-900/80 p-2"
-                >
-                  <div className="h-10 w-16 rounded-md overflow-hidden bg-slate-800">
+          {/* resultados RAWG */}
+          <div className="px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+              Resultados da RAWG
+            </p>
+
+            {loading && (
+              <p className="text-[11px] text-slate-400">
+                Buscando jogos...
+              </p>
+            )}
+
+            {!loading && results.length === 0 && search.length >= 2 && (
+              <p className="text-[11px] text-slate-500">
+                Nenhum jogo encontrado para &quot;{search}&quot;.
+              </p>
+            )}
+
+            {!loading && results.length > 0 && (
+              <div className="space-y-1">
+                {results.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => handleSelectRawg(r)}
+                    className="w-full text-left text-[11px] px-2 py-1.5 rounded-md hover:bg-slate-800/80 flex gap-2"
+                  >
                     {r.backgroundImage && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={r.backgroundImage}
                         alt={r.name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
+                        className="h-10 w-16 rounded-md object-cover flex-shrink-0"
                       />
                     )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-100 truncate">
-                      {r.name}
-                    </p>
-                    <p className="text-[10px] text-slate-400 truncate">
-                      {(r.genres[0] || "Multiplayer") +
-                        " • " +
-                        (r.platforms[0] || "Multi") +
-                        (r.released
-                          ? " • " + new Date(r.released).getFullYear()
-                          : "")}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleImport(r)}
-                    className="rounded-md border border-sky-500/60 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-100 hover:bg-sky-500/20 disabled:opacity-60"
-                    disabled={isImporting}
-                  >
-                    {isImporting ? "Importando..." : "Usar"}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-slate-100 truncate">
+                        {r.name}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {r.platforms.join(", ") || "Multi"}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        {r.released
+                          ? `Lançado em ${new Date(
+                              r.released
+                            ).toLocaleDateString("pt-BR")}`
+                          : "Data de lançamento desconhecida"}
+                      </p>
+                    </div>
                   </button>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {error && (
-        <p className="text-[11px] text-rose-300">
-          {error}
-        </p>
-      )}
+      <style jsx>{`
+        .custom-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+          background: rgba(148, 163, 184, 0.6);
+          border-radius: 999px;
+        }
+      `}</style>
     </div>
   );
 }
