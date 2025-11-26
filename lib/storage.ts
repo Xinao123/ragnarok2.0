@@ -4,7 +4,7 @@ const endpoint = process.env.MINIO_ENDPOINT;
 const region = process.env.MINIO_REGION || "us-east-1";
 const accessKeyId = process.env.MINIO_ACCESS_KEY;
 const secretAccessKey = process.env.MINIO_SECRET_KEY;
-const bucket = process.env.MINIO_BUCKE T|| "avatars";
+const bucket = process.env.MINIO_BUCKET|| "avatars";
 
 if (!endpoint) {
   throw new Error("MINIO_ENDPOINT não configurado");
