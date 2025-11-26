@@ -26,7 +26,7 @@ export async function createLobby(input: CreateLobbyInput) {
     throw new Error("O lobby precisa ter pelo menos 2 vagas.");
   }
 
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     // cria o lobby
     const lobby = await tx.lobby.create({
       data: {
@@ -72,7 +72,7 @@ export async function joinLobby(
   lobbyId: string,
   userId: string
 ): Promise<JoinLobbyResult> {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     const lobby = await tx.lobby.findUnique({
       where: { id: lobbyId },
       include: {
@@ -92,7 +92,7 @@ export async function joinLobby(
     }
 
     // já está dentro como ACTIVE?
-    const alreadyMember = lobby.members.some((m) => m.userId === userId);
+    const alreadyMember = lobby.members.some((m: any) => m.userId === userId);
     if (alreadyMember) {
       return {
         lobbyId: lobby.id,
@@ -125,7 +125,7 @@ export async function joinLobby(
         where: { id: lobby.id },
         data: { status: LobbyStatus.FULL },
       });
-      newStatus = updated.status;
+     newStatus = "FULL";
     }
 
     return {
@@ -141,7 +141,7 @@ export async function joinLobby(
  * Se todos saírem, fecha o lobby.
  */
 export async function leaveLobby(lobbyId: string, userId: string) {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any ) => {
     const member = await tx.lobbyMember.findFirst({
       where: {
         lobbyId,
