@@ -2,41 +2,82 @@ services:
   db:
     image: postgres:16
     container_name: ragnarok-db
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "postgres"
       POSTGRES_DB: "ragnarok"
     volumes:
       - db_data:/var/lib/postgresql/data
+    # Se você não precisar acessar o Postgres de fora, pode comentar/remover essas portas
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
 
   minio:
     image: minio/minio:latest
     container_name: ragnarok-minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     environment:
       MINIO_ROOT_USER: "minio"
       MINIO_ROOT_PASSWORD: "minio123"
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    # Console e API expostos pra você conseguir acessar do navegador
+    ports:
+      - "9000:9000" # API S3
+      - "9001:9001" # painel web
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ragnarok-app
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/ragnarok"
+      NODE_ENV: "production"
+      # Adicione aqui outras variáveis que seu app usa, se necessário:
+      # NEXTAUTH_URL: "http://SEU_IP_OU_DOMINIO"
+      # NEXT_PUBLIC_SOCKET_URL: "http://SEU_IP_OU_DOMINIO:4000"
+      # MINIO_ENDPOINT: "http://minio:9000"
+      # MINIO_ACCESS_KEY: "minio"
+      # MINIO_SECRET_KEY: "minio123"
+    depends_on:
+      - db
+      - minio
+    # Não precisa expor porta pra fora, o nginx fala com ele internamente
+    expose:
+      - "3000"
+    restart: unless-stopped
 
   socket-server:
     build:
       context: ./socket-server
+      # se o Dockerfile do socket tiver outro nome, ajusta aqui:
       dockerfile: Dockerfile
     container_name: ragnarok-socket
-    ports:
-      - "4000:4000"
     environment:
       SOCKET_PORT: "4000"
-      NEXT_API_BASE: "http://host.docker.internal:3000"
+      # Agora o socket-server fala com o APP dentro da rede Docker
+      NEXT_API_BASE: "http://app:3000"
       CHAT_ENCRYPTION_KEY: "${CHAT_ENCRYPTION_KEY}"
     depends_on:
       - db
+      - app
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: ragnarok-nginx
+    volumes:
+      - /srv/nginx/app.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    ports:
+      - "8080:80"
+    restart: unless-stopped
 
 volumes:
   db_data:
