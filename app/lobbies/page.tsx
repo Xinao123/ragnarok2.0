@@ -320,8 +320,6 @@ export default async function LobbiesPage() {
                   id: g.id,
                   name: g.name,
                   platform: g.platform,
-                  // se não tiver no schema, tanto faz ficar undefined
-                  // @ts-expect-error campo opcional
                   backgroundImageUrl: g.backgroundImageUrl,
                 }))}
               />
