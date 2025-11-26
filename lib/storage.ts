@@ -4,7 +4,7 @@ const endpoint = process.env.MINIO_ENDPOINT;
 const region = process.env.MINIO_REGION || "us-east-1";
 const accessKeyId = process.env.MINIO_ACCESS_KEY;
 const secretAccessKey = process.env.MINIO_SECRET_KEY;
-const bucket = process.env.MINIO_BUCKET || "avatars";
+const bucket = process.env.MINIO_BUCKE T|| "avatars";
 
 if (!endpoint) {
   throw new Error("MINIO_ENDPOINT não configurado");
@@ -24,8 +24,7 @@ const s3 = new S3Client({
   },
 });
 
-// Base pública para montar a URL final
-// Se MINIO_PUBLIC_URL estiver setada, usamos ela; senão caímos pro endpoint
+
 const rawPublicBase = process.env.MINIO_PUBLIC_URL || endpoint;
 const basePublicUrl = rawPublicBase.replace(/\/$/, ""); // remove / no final
 
