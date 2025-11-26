@@ -1,12 +1,27 @@
-// app/lobbies/[lobbyId]/page.tsx
 import { prisma } from "@/lib/prisma";
+import { MemberStatus } from "@prisma/client";
 
 type PageProps = {
-  params: { lobbyId: string };
+  params: { lobbyId?: string }; // <- pode vir undefined, então deixamos opcional
 };
 
 export default async function LobbyDetailPage({ params }: PageProps) {
-  const { lobbyId } = params;
+  const lobbyId = params?.lobbyId;
+
+  // Se o ID não veio, nem tenta bater no banco
+  if (!lobbyId || typeof lobbyId !== "string") {
+    return (
+      <div className="p-6 space-y-3">
+        <h1 className="text-xl font-semibold">Lobby inválido</h1>
+        <p className="text-sm text-slate-400">
+          O identificador deste lobby não é válido.
+        </p>
+        <p className="text-xs font-mono text-slate-300 bg-slate-950/80 border border-slate-800 rounded px-2 py-1 inline-block">
+          lobbyId: {String(lobbyId)}
+        </p>
+      </div>
+    );
+  }
 
   try {
     const lobby = await prisma.lobby.findUnique({
@@ -15,6 +30,7 @@ export default async function LobbyDetailPage({ params }: PageProps) {
         game: true,
         owner: true,
         members: {
+          where: { status: MemberStatus.ACTIVE },
           include: { user: true },
         },
       },
@@ -36,6 +52,8 @@ export default async function LobbyDetailPage({ params }: PageProps) {
     }
 
     const currentPlayers = lobby.members.length;
+    const isFull =
+      currentPlayers >= lobby.maxPlayers || lobby.status === "FULL";
 
     return (
       <div className="p-6 space-y-4">
@@ -51,6 +69,15 @@ export default async function LobbyDetailPage({ params }: PageProps) {
         </header>
 
         <section className="space-y-2 text-sm text-slate-300">
+          <p>
+            <span className="text-slate-400">Status:</span>{" "}
+            {lobby.status === "OPEN"
+              ? "Aberto"
+              : lobby.status === "FULL"
+              ? "Cheio"
+              : "Fechado"}{" "}
+            • {currentPlayers}/{lobby.maxPlayers}
+          </p>
           <p>
             <span className="text-slate-400">Descrição:</span>{" "}
             {lobby.description || "Sem descrição."}
@@ -98,10 +125,10 @@ export default async function LobbyDetailPage({ params }: PageProps) {
           )}
         </section>
 
-        {/* Bloco de debug opcional: remove depois se quiser */}
+        {/* Bloco de debug — pode remover depois */}
         <section className="mt-4">
           <p className="text-xs text-slate-500 mb-1">
-            Debug (JSON do lobby) — só para desenvolvimento:
+            Debug (JSON do lobby) — apenas para desenvolvimento:
           </p>
           <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
             {JSON.stringify(lobby, null, 2)}
