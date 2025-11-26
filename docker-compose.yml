@@ -34,6 +34,7 @@ services:
       dockerfile: Dockerfile
     container_name: ragnarok-app
     environment:
+      RAWG_API_KEY: "${RAWG_API_KEY}"
       DATABASE_URL: "postgresql://postgres:postgres@db:5432/ragnarok"
       NODE_ENV: "production"
       NEXTAUTH_URL: "http://192.168.0.111:8080"
