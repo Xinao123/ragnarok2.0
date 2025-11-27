@@ -45,6 +45,7 @@ services:
     # Não precisa expor porta pra fora, o nginx fala com ele internamente
     expose:
       - "3000"
+      - "5555:5555"
     restart: unless-stopped
 
   socket-server:
