@@ -37,6 +37,9 @@ async function createLobbyAction(formData: FormData) {
 
   const maxPlayers = Number(maxPlayersRaw);
 
+  
+  let newLobbyId = "";
+
   if (!gameId) {
     throw new Error("Selecione um jogo para o lobby.");
   }
@@ -47,7 +50,7 @@ async function createLobbyAction(formData: FormData) {
     throw new Error("O número de vagas deve ser entre 2 e 16.");
   }
 
-  const lobbyId = await prisma.$transaction(async (tx) => {
+ await prisma.$transaction(async (tx) => {
     const lobby = await tx.lobby.create({
       data: {
         title,
@@ -61,7 +64,9 @@ async function createLobbyAction(formData: FormData) {
       },
     });
 
-    await tx.lobbyMember.create({
+       newLobbyId = lobby.id;
+
+await tx.lobbyMember.create({
       data: {
         lobbyId: lobby.id,
         userId: user.id,
@@ -69,12 +74,11 @@ async function createLobbyAction(formData: FormData) {
         status: MemberStatus.ACTIVE,
       },
     });
-
-    return lobby.id;
   });
 
+
   revalidatePath("/lobbies");
-  redirect(`/lobbies/${lobbyId}`);
+  redirect(`/lobbies/${newLobbyId}?lobbyId=${newLobbyId}`);
 }
 
 async function joinLobbyAction(formData: FormData) {
@@ -113,7 +117,8 @@ async function joinLobbyAction(formData: FormData) {
       (m) => m.userId === user.id
     );
     if (alreadyMember) {
-      return;
+      // já está dentro, só redireciona pra página do lobby
+      redirect(`/lobbies/${lobbyId}?lobbyId=${lobbyId}`);
     }
 
     const currentCount = lobby.members.length;
@@ -140,8 +145,9 @@ async function joinLobbyAction(formData: FormData) {
   });
 
   revalidatePath("/lobbies");
-  redirect(`/lobbies/${lobbyId}`);
+  redirect(`/lobbies/${lobbyId}?lobbyId=${lobbyId}`);
 }
+
 
 async function leaveLobbyAction(formData: FormData) {
   "use server";

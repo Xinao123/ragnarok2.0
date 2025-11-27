@@ -1,31 +1,40 @@
-// app/lobbies/[lobbyId]/page.tsx  (ou [id], tanto faz o nome da pasta)
+// app/lobbies/[lobbyId]/page.tsx
 import { prisma } from "@/lib/prisma";
-import { MemberStatus } from "@prisma/client";
 
 type PageProps = {
   params: Record<string, string | string[]>;
+  searchParams?: Record<string, string | string[] | undefined>;
 };
 
-// Função genérica pra achar o ID a partir de qualquer chave de params
-function resolveLobbyId(params: Record<string, string | string[]>): string | null {
-  if (!params) return null;
+function firstString(value: string | string[] | undefined): string | null {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value;
+}
 
+// Resolve o ID do lobby a partir de searchParams OU params da rota
+function resolveLobbyId(
+  params: Record<string, string | string[]>,
+  searchParams?: Record<string, string | string[] | undefined>
+): string | null {
+  // 1) tenta pegar da query (?lobbyId=xxx ou ?id=xxx)
+  const fromQuery =
+    firstString(searchParams?.lobbyId) ?? firstString(searchParams?.id);
+
+  if (fromQuery) return fromQuery;
+
+  // 2) pega o primeiro param dinâmico da rota (/lobbies/[qualquerCoisa])
   const keys = Object.keys(params);
   if (keys.length === 0) return null;
 
-  const key = keys[0]; // pega o primeiro param dinâmico da rota
-  const raw = params[key];
-
-  if (Array.isArray(raw)) return raw[0] ?? null;
-  if (typeof raw === "string") return raw;
-
-  return String(raw);
+  const key = keys[0];
+  return firstString(params[key]);
 }
 
-export default async function LobbyDetailPage({ params }: PageProps) {
-  const lobbyId = resolveLobbyId(params);
+export default async function LobbyDetailPage({ params, searchParams }: PageProps) {
+  const lobbyId = resolveLobbyId(params, searchParams);
 
-  // Se não conseguimos resolver um ID, nem toca no banco
+  // Se não conseguimos resolver um ID, nem chamamos o Prisma
   if (!lobbyId) {
     return (
       <div className="p-6 space-y-3">
@@ -35,9 +44,9 @@ export default async function LobbyDetailPage({ params }: PageProps) {
         </p>
 
         <div className="mt-3">
-          <p className="text-xs text-slate-500 mb-1">Debug params:</p>
+          <p className="text-xs text-slate-500 mb-1">Debug params/searchParams:</p>
           <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
-            {JSON.stringify(params, null, 2)}
+            {JSON.stringify({ params, searchParams }, null, 2)}
           </pre>
         </div>
       </div>
@@ -51,7 +60,6 @@ export default async function LobbyDetailPage({ params }: PageProps) {
         game: true,
         owner: true,
         members: {
-          where: { status: MemberStatus.ACTIVE },
           include: { user: true },
         },
       },
@@ -69,9 +77,9 @@ export default async function LobbyDetailPage({ params }: PageProps) {
           </p>
 
           <div className="mt-3">
-            <p className="text-xs text-slate-500 mb-1">Debug params:</p>
+            <p className="text-xs text-slate-500 mb-1">Debug params/searchParams:</p>
             <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
-              {JSON.stringify(params, null, 2)}
+              {JSON.stringify({ params, searchParams }, null, 2)}
             </pre>
           </div>
         </div>
@@ -152,14 +160,14 @@ export default async function LobbyDetailPage({ params }: PageProps) {
           )}
         </section>
 
-        {/* Debug extra pra garantir o que está vindo de params / lobbyId */}
+        {/* Debug extra pra garantir o ID resolvido */}
         <section className="mt-4 space-y-2">
           <p className="text-xs text-slate-500">
-            Debug – param resolvido:{" "}
+            Debug – lobbyId resolvido:{" "}
             <span className="font-mono">{lobbyId}</span>
           </p>
           <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
-            {JSON.stringify(params, null, 2)}
+            {JSON.stringify({ params, searchParams }, null, 2)}
           </pre>
         </section>
       </div>
@@ -180,9 +188,9 @@ export default async function LobbyDetailPage({ params }: PageProps) {
         </div>
 
         <div className="mt-3">
-          <p className="text-xs text-slate-500 mb-1">Debug params:</p>
+          <p className="text-xs text-slate-500 mb-1">Debug params/searchParams:</p>
           <pre className="text-[11px] leading-snug bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto text-slate-200">
-            {JSON.stringify(params, null, 2)}
+            {JSON.stringify({ params, searchParams }, null, 2)}
           </pre>
         </div>
       </div>
