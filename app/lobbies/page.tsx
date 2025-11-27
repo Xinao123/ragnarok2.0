@@ -37,20 +37,15 @@ async function createLobbyAction(formData: FormData) {
 
   const maxPlayers = Number(maxPlayersRaw);
 
-  
-  let newLobbyId = "";
-
-  if (!gameId) {
-    throw new Error("Selecione um jogo para o lobby.");
-  }
-  if (!title) {
-    throw new Error("Informe um título para o lobby.");
-  }
+  if (!gameId) throw new Error("Selecione um jogo para o lobby.");
+  if (!title) throw new Error("Informe um título para o lobby.");
   if (!maxPlayers || Number.isNaN(maxPlayers) || maxPlayers < 2 || maxPlayers > 16) {
     throw new Error("O número de vagas deve ser entre 2 e 16.");
   }
 
- await prisma.$transaction(async (tx) => {
+  let newLobbyId = "";
+
+  await prisma.$transaction(async (tx) => {
     const lobby = await tx.lobby.create({
       data: {
         title,
@@ -64,9 +59,9 @@ async function createLobbyAction(formData: FormData) {
       },
     });
 
-       newLobbyId = lobby.id;
+    newLobbyId = lobby.id;
 
-await tx.lobbyMember.create({
+    await tx.lobbyMember.create({
       data: {
         lobbyId: lobby.id,
         userId: user.id,
@@ -76,9 +71,9 @@ await tx.lobbyMember.create({
     });
   });
 
-
   revalidatePath("/lobbies");
-  redirect(`/lobbies/${newLobbyId}?lobbyId=${newLobbyId}`);
+  // ✅ agora usamos só o segmento dinâmico
+  redirect(`/lobbies/${newLobbyId}`);
 }
 
 async function joinLobbyAction(formData: FormData) {
@@ -90,9 +85,7 @@ async function joinLobbyAction(formData: FormData) {
   }
 
   const lobbyId = String(formData.get("lobbyId") || "").trim();
-  if (!lobbyId) {
-    throw new Error("Lobby inválido.");
-  }
+  if (!lobbyId) throw new Error("Lobby inválido.");
 
   await prisma.$transaction(async (tx) => {
     const lobby = await tx.lobby.findUnique({
@@ -105,20 +98,15 @@ async function joinLobbyAction(formData: FormData) {
       },
     });
 
-    if (!lobby) {
-      throw new Error("Lobby não encontrado.");
-    }
-
+    if (!lobby) throw new Error("Lobby não encontrado.");
     if (lobby.status === LobbyStatus.CLOSED) {
       throw new Error("Este lobby está fechado.");
     }
 
-    const alreadyMember = lobby.members.some(
-      (m) => m.userId === user.id
-    );
+    const alreadyMember = lobby.members.some((m) => m.userId === user.id);
     if (alreadyMember) {
-      // já está dentro, só redireciona pra página do lobby
-      redirect(`/lobbies/${lobbyId}?lobbyId=${lobbyId}`);
+      // já está no lobby → só redireciona
+      redirect(`/lobbies/${lobbyId}`);
     }
 
     const currentCount = lobby.members.length;
@@ -145,9 +133,9 @@ async function joinLobbyAction(formData: FormData) {
   });
 
   revalidatePath("/lobbies");
-  redirect(`/lobbies/${lobbyId}?lobbyId=${lobbyId}`);
+  // ✅ idem aqui
+  redirect(`/lobbies/${lobbyId}`);
 }
-
 
 async function leaveLobbyAction(formData: FormData) {
   "use server";
