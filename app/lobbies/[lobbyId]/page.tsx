@@ -13,25 +13,15 @@ import {
 import { Button } from "@/components/ui/button";
 
 type PageProps = {
-  params: { lobbyId?: string; id?: string };
+  params: { lobbyId: string };
 };
 
 export default async function LobbyDetailPage({ params }: PageProps) {
-  const lobbyId = params?.lobbyId ?? params?.id ?? "";
+  const lobbyId = params.lobbyId;
 
-  // se mesmo assim não tiver id, aí sim mostramos erro
+  // Se por algum motivo não tiver ID, 404 direto
   if (!lobbyId) {
-    return (
-      <div className="max-w-3xl mx-auto py-10 space-y-4">
-        <h1 className="text-2xl font-semibold">Lobby inválido</h1>
-        <p className="text-sm text-slate-400">
-          O identificador deste lobby não é válido.
-        </p>
-        <Button asChild size="sm" className="mt-2">
-          <Link href="/lobbies">Voltar para lobbies</Link>
-        </Button>
-      </div>
-    );
+    notFound();
   }
 
   const [user, lobby] = await Promise.all([
