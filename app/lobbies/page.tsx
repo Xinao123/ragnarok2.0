@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-
 import {
   LobbyStatus,
   MemberRole,
   MemberStatus,
 } from "@prisma/client";
-
 import {
   Card,
   CardHeader,
@@ -18,21 +15,12 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
-
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { GameSearchInput } from "@/components/lobbies/GameSearchInput";
 
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
 /*                               SERVER ACTIONS                               */
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
 
 async function createLobbyAction(formData: FormData) {
   "use server";
@@ -45,13 +33,12 @@ async function createLobbyAction(formData: FormData) {
   const gameId = String(formData.get("gameId") || "").trim();
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
+  const maxPlayersRaw = formData.get("maxPlayers");
   const language = String(formData.get("language") || "").trim();
   const region = String(formData.get("region") || "").trim();
-  const maxPlayersRaw = formData.get("maxPlayers");
 
   const maxPlayers = Number(maxPlayersRaw);
 
-  // Validações simples (o HTML já ajuda com required, min, max)
   if (!gameId) {
     throw new Error("Selecione um jogo para o lobby.");
   }
@@ -87,7 +74,7 @@ async function createLobbyAction(formData: FormData) {
 
     newLobbyId = lobby.id;
 
-    // já entra como líder do lobby
+    // o criador entra como líder do lobby
     await tx.lobbyMember.create({
       data: {
         lobbyId: lobby.id,
@@ -98,10 +85,10 @@ async function createLobbyAction(formData: FormData) {
     });
   });
 
-  // atualiza listagem em /lobbies
+  // atualiza listagem
   revalidatePath("/lobbies");
 
-  // redireciona para a página de detalhe do lobby
+  // redireciona para o detalhe do lobby
   redirect(`/lobbies/${newLobbyId}`);
 }
 
@@ -118,24 +105,61 @@ async function joinLobbyAction(formData: FormData) {
     throw new Error("Lobby inválido.");
   }
 
-  // Opcional: você pode transformar isso numa transação com checagem de maxPlayers
-  await prisma.lobbyMember.upsert({
-    where: {
-      lobbyId_userId: {
+  await prisma.$transaction(async (tx) => {
+    const lobby = await tx.lobby.findUnique({
+      where: { id: lobbyId },
+      include: {
+        members: {
+          where: { status: MemberStatus.ACTIVE },
+        },
+      },
+    });
+
+    if (!lobby) {
+      throw new Error("Lobby não encontrado.");
+    }
+
+    const existing = await tx.lobbyMember.findFirst({
+      where: {
         lobbyId,
         userId: user.id,
       },
-    },
-    update: {
-      status: MemberStatus.ACTIVE,
-      role: MemberRole.MEMBER,
-    },
-    create: {
-      lobbyId,
-      userId: user.id,
-      status: MemberStatus.ACTIVE,
-      role: MemberRole.MEMBER,
-    },
+    });
+
+    if (existing) {
+      // se já existe, reativa
+      await tx.lobbyMember.update({
+        where: { id: existing.id },
+        data: { status: MemberStatus.ACTIVE },
+      });
+    } else {
+      if (lobby.members.length >= lobby.maxPlayers) {
+        throw new Error("Lobby cheio.");
+      }
+
+      await tx.lobbyMember.create({
+        data: {
+          lobbyId,
+          userId: user.id,
+          status: MemberStatus.ACTIVE,
+          role: MemberRole.MEMBER,
+        },
+      });
+    }
+
+    const activeCount = await tx.lobbyMember.count({
+      where: { lobbyId, status: MemberStatus.ACTIVE },
+    });
+
+    await tx.lobby.update({
+      where: { id: lobbyId },
+      data: {
+        status:
+          activeCount >= lobby.maxPlayers
+            ? LobbyStatus.FULL
+            : LobbyStatus.OPEN,
+      },
+    });
   });
 
   revalidatePath("/lobbies");
@@ -155,25 +179,53 @@ async function leaveLobbyAction(formData: FormData) {
     throw new Error("Lobby inválido.");
   }
 
-  // Marca como LEFT (em vez de apagar) pra manter histórico
-  await prisma.lobbyMember.updateMany({
-    where: {
-      lobbyId,
-      userId: user.id,
-      status: MemberStatus.ACTIVE,
-    },
-    data: {
-      status: MemberStatus.LEFT,
-    },
+  await prisma.$transaction(async (tx) => {
+    const member = await tx.lobbyMember.findFirst({
+      where: {
+        lobbyId,
+        userId: user.id,
+        status: MemberStatus.ACTIVE,
+      },
+    });
+
+    if (!member) {
+      return;
+    }
+
+    await tx.lobbyMember.update({
+      where: { id: member.id },
+      data: { status: MemberStatus.LEFT },
+    });
+
+    const lobby = await tx.lobby.findUnique({
+      where: { id: lobbyId },
+      include: {
+        members: {
+          where: { status: MemberStatus.ACTIVE },
+        },
+      },
+    });
+
+    if (!lobby) return;
+
+    await tx.lobby.update({
+      where: { id: lobbyId },
+      data: {
+        status:
+          lobby.members.length === 0
+            ? LobbyStatus.CLOSED
+            : LobbyStatus.OPEN,
+      },
+    });
   });
 
   revalidatePath("/lobbies");
   redirect("/lobbies");
 }
 
-/* -------------------------------------------------------------------------- */
-/*                                 PAGE (SSR)                                 */
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
+/*                                   PAGE                                     */
+/* ========================================================================== */
 
 export default async function LobbiesPage() {
   const [user, lobbies, games] = await Promise.all([
@@ -184,9 +236,7 @@ export default async function LobbiesPage() {
           in: [LobbyStatus.OPEN, LobbyStatus.FULL],
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
       include: {
         game: true,
         owner: {
@@ -198,21 +248,8 @@ export default async function LobbiesPage() {
           },
         },
         members: {
-          where: {
-            status: MemberStatus.ACTIVE,
-          },
-          include: {
-            user: true,
-          },
-        },
-        _count: {
-          select: {
-            members: {
-              where: {
-                status: MemberStatus.ACTIVE,
-              },
-            },
-          },
+          where: { status: MemberStatus.ACTIVE },
+          include: { user: true },
         },
       },
     }),
@@ -225,16 +262,16 @@ export default async function LobbiesPage() {
   const meId = user?.id ?? null;
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6 py-6">
       {/* topo */}
-      <header className="space-y-2">
+      <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
-          LFG & Lobbies
+          LFG &amp; Lobbies
         </h1>
         <p className="text-sm text-slate-400">
           Crie salas para encontrar jogadores ou entre em um lobby já criado.
         </p>
-      </header>
+      </div>
 
       {/* criação de lobby */}
       {meId && (
@@ -242,96 +279,95 @@ export default async function LobbiesPage() {
           <CardHeader>
             <CardTitle className="text-base">Criar novo lobby</CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Escolha o jogo, defina um título e configure os detalhes da sua
-              sala.
+              Defina jogo, vagas e descrição da sala.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form
-              action={createLobbyAction}
-              className="grid gap-4 md:grid-cols-2"
-            >
-              {/* Jogo */}
-              <div className="space-y-1">
-                <Label htmlFor="gameId">Jogo</Label>
-                <Select name="gameId">
-                  <SelectTrigger id="gameId">
-                    <SelectValue placeholder="Selecione um jogo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {games.map((game) => (
-                      <SelectItem key={game.id} value={game.id}>
-                        {game.name}{" "}
-                        {game.platform ? `• ${game.platform}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-slate-500">
-                  Lista baseada nos últimos jogos que você cadastrou/integrar.
-                </p>
-              </div>
+          <CardContent className="pt-0">
+            <form action={createLobbyAction} className="space-y-4">
+              {/* jogo (GameSearchInput cuida do hidden gameId) */}
+              <GameSearchInput
+                initialGames={games.map((g) => ({
+                  id: g.id,
+                  name: g.name,
+                  platform: g.platform,
+                  backgroundImageUrl: g.backgroundImageUrl,
+                }))}
+              />
 
-              {/* Título */}
+              {/* título */}
               <div className="space-y-1">
-                <Label htmlFor="title">Título do lobby</Label>
-                <Input
-                  id="title"
+                <label className="text-[11px] text-slate-300">
+                  Título do lobby
+                </label>
+                <input
                   name="title"
-                  placeholder="Ex: Partida ranqueada, só players BR"
+                  type="text"
                   required
+                  maxLength={80}
+                  placeholder="Ex: Ranked tryhard, chill, treinamento..."
+                  className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
               </div>
 
-              {/* Máximo de players */}
+              {/* max players */}
               <div className="space-y-1">
-                <Label htmlFor="maxPlayers">Máx. de jogadores</Label>
-                <Input
-                  id="maxPlayers"
+                <label className="text-[11px] text-slate-300">
+                  Máximo de jogadores
+                </label>
+                <input
                   name="maxPlayers"
                   type="number"
                   min={2}
                   max={16}
                   defaultValue={5}
                   required
+                  className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[10px] text-slate-500">
                   Entre 2 e 16 jogadores.
                 </p>
               </div>
 
-              {/* Idioma */}
-              <div className="space-y-1">
-                <Label htmlFor="language">Idioma</Label>
-                <Input
-                  id="language"
-                  name="language"
-                  placeholder="Ex: pt-BR, en, es..."
-                />
+              {/* idioma & região */}
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-300">
+                    Idioma
+                  </label>
+                  <input
+                    name="language"
+                    type="text"
+                    placeholder="Ex: pt-BR, en, es..."
+                    className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-300">
+                    Região
+                  </label>
+                  <input
+                    name="region"
+                    type="text"
+                    placeholder="Ex: BR, NA, EU..."
+                    className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
               </div>
 
-              {/* Região */}
+              {/* descrição */}
               <div className="space-y-1">
-                <Label htmlFor="region">Região</Label>
-                <Input
-                  id="region"
-                  name="region"
-                  placeholder="Ex: BR, NA, EU..."
-                />
-              </div>
-
-              {/* Descrição */}
-              <div className="space-y-1 md:col-span-2">
-                <Label htmlFor="description">Descrição</Label>
-                <Textarea
-                  id="description"
+                <label className="text-[11px] text-slate-300">
+                  Descrição
+                </label>
+                <textarea
                   name="description"
                   rows={3}
-                  placeholder="Explique as regras, modo de jogo, rank mínimo, etc."
+                  placeholder="Explique regras, modo de jogo, rank mínimo, etc."
+                  className="w-full resize-none rounded-md border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
               </div>
 
-              <div className="md:col-span-2 flex justify-end">
+              <div className="flex justify-end">
                 <Button type="submit" size="sm">
                   Criar lobby
                 </Button>
@@ -341,12 +377,12 @@ export default async function LobbiesPage() {
         </Card>
       )}
 
-      {/* listagem de lobbys */}
+      {/* lista de lobbies */}
       <Card className="border-slate-800 bg-slate-900/80">
         <CardHeader>
           <CardTitle className="text-base">Lobbies disponíveis</CardTitle>
           <CardDescription className="text-xs text-slate-400">
-            Veja quem está procurando grupo agora e entre em uma sala.
+            Veja quem está procurando grupo agora.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -362,11 +398,15 @@ export default async function LobbiesPage() {
                   currentPlayers >= lobby.maxPlayers ||
                   lobby.status === LobbyStatus.FULL;
 
-                const isInLobby = lobby.members.some(
-                  (m) => m.userId === meId && m.status === MemberStatus.ACTIVE,
-                );
+                const isInLobby = meId
+                  ? lobby.members.some(
+                    (m) =>
+                      m.userId === meId &&
+                      m.status === MemberStatus.ACTIVE,
+                  )
+                  : false;
 
-                const isLeader = lobby.ownerId === meId;
+                const isLeader = meId === lobby.ownerId;
 
                 return (
                   <Card
@@ -376,7 +416,7 @@ export default async function LobbiesPage() {
                     <CardContent className="py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <h2 className="text-sm font-semibold">
+                          <h2 className="text-sm font-semibold text-slate-100">
                             {lobby.title}
                           </h2>
                           <span
@@ -400,17 +440,21 @@ export default async function LobbiesPage() {
                             {lobby.description}
                           </p>
                         )}
+                        {isLeader && (
+                          <p className="text-[10px] text-sky-400">
+                            Você é o líder deste lobby.
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex flex-col items-end gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-400">
-                            Jogadores: {currentPlayers}/{lobby.maxPlayers}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Button asChild size="sm" variant="outline">
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                          >
                             <Link href={`/lobbies/${lobby.id}`}>
                               Ver lobby
                             </Link>
@@ -444,23 +488,18 @@ export default async function LobbiesPage() {
                                   <Button
                                     type="submit"
                                     size="sm"
+                                    className="text-xs"
                                     disabled={isFull}
                                   >
                                     {isFull
                                       ? "Lobby cheio"
-                                      : "Entrar no lobby"}
+                                      : "Entrar para participar"}
                                   </Button>
                                 </form>
                               )}
                             </>
                           )}
                         </div>
-
-                        {isLeader && (
-                          <span className="text-[10px] text-sky-400">
-                            Você é o líder deste lobby.
-                          </span>
-                        )}
                       </div>
                     </CardContent>
                   </Card>
