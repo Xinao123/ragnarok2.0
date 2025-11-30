@@ -30,30 +30,65 @@ async function createLobbyAction(formData: FormData) {
     redirect("/auth/login");
   }
 
-  const gameId = String(formData.get("gameId") || "").trim();
+  // 1) Dados que já existiam
+  const gameIdFromForm = String(formData.get("gameId") || "").trim();
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const maxPlayersRaw = formData.get("maxPlayers");
   const language = String(formData.get("language") || "").trim();
   const region = String(formData.get("region") || "").trim();
 
-  const maxPlayers = Number(maxPlayersRaw);
+  // 2) Campos vindos da escolha RAWG (vamos usar se não tiver gameId)
+  const rawgIdStr = String(formData.get("rawgId") || "").trim();
+  const rawgName = String(formData.get("gameName") || "").trim();
+  const rawgSlug = String(formData.get("gameSlug") || "").trim();
+  const rawgPlatform = String(formData.get("gamePlatform") || "").trim();
+  const rawgBgImage = String(
+    formData.get("gameBackgroundImageUrl") || ""
+  ).trim();
 
+  const maxPlayers = Number(maxPlayersRaw);
+  if (!title) {
+    throw new Error("Defina um título para o lobby.");
+  }
+  if (!maxPlayers || Number.isNaN(maxPlayers) || maxPlayers <= 0) {
+    throw new Error("Número de jogadores inválido.");
+  }
+
+  // 3) Garantir que temos um gameId:
+  //    - se veio do form (jogo já salvo) usamos direto
+  //    - se NÃO veio, mas temos rawgId, criamos/atualizamos na tabela Game
+  let gameId = gameIdFromForm;
+
+  if (!gameId && rawgIdStr) {
+    const rawgIdNum = Number(rawgIdStr);
+    if (!rawgIdNum || Number.isNaN(rawgIdNum)) {
+      throw new Error("Jogo inválido (RAWG ID incorreto).");
+    }
+
+    const game = await prisma.game.upsert({
+      where: { rawgId: rawgIdNum },
+      update: {
+        name: rawgName || undefined,
+        slug: rawgSlug || undefined,
+        platform: rawgPlatform || undefined,
+        backgroundImageUrl: rawgBgImage || undefined,
+      },
+      create: {
+        name: rawgName || "Jogo desconhecido",
+        slug: rawgSlug || `rawg-${rawgIdNum}`,
+        platform: rawgPlatform || "Multi",
+        rawgId: rawgIdNum,
+        backgroundImageUrl: rawgBgImage || null,
+      },
+    });
+
+    gameId = game.id;
+  }
+
+  // se mesmo assim não tiver gameId, aí sim erro
   if (!gameId) {
     throw new Error("Selecione um jogo para o lobby.");
-  }
-
-  if (!title) {
-    throw new Error("Informe um título para o lobby.");
-  }
-
-  if (
-    !maxPlayers ||
-    Number.isNaN(maxPlayers) ||
-    maxPlayers < 2 ||
-    maxPlayers > 16
-  ) {
-    throw new Error("O número de vagas deve ser entre 2 e 16.");
   }
 
   let newLobbyId = "";
@@ -74,7 +109,6 @@ async function createLobbyAction(formData: FormData) {
 
     newLobbyId = lobby.id;
 
-    // o criador entra como líder do lobby
     await tx.lobbyMember.create({
       data: {
         lobbyId: lobby.id,
@@ -85,12 +119,11 @@ async function createLobbyAction(formData: FormData) {
     });
   });
 
-  // atualiza listagem
+  // revalida listagem e joga o usuário pra página do lobby
   revalidatePath("/lobbies");
-
-  // redireciona para o detalhe do lobby
   redirect(`/lobbies/${newLobbyId}`);
 }
+
 
 async function joinLobbyAction(formData: FormData) {
   "use server";
