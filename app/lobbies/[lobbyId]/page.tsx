@@ -17,9 +17,11 @@ type PageProps = {
 };
 
 export default async function LobbyDetailPage({ params }: PageProps) {
-  const lobbyId = params.lobbyId;
+  console.log("PARAMS LOBBY DETAIL:", params);
 
-  // Se por algum motivo não tiver ID, 404 direto
+  const lobbyId = params.lobbyId; // confia no Next
+
+  // Se por algum bug MUITO bizarro vier vazio, manda 404
   if (!lobbyId) {
     notFound();
   }
