@@ -272,12 +272,13 @@ export default async function LobbyDetailPage(props: PageProps) {
                       />
                       <Button
                         type="submit"
-                        size="xs"
+                        size="sm"
                         variant="outline"
-                        className="text-[11px]"
+                        className="h-7 px-2 text-[11px]"
                       >
                         Expulsar
                       </Button>
+
                     </form>
                   )}
                 </div>
