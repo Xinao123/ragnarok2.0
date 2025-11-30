@@ -19,7 +19,7 @@ const FEATURED_TITLES = [
   "Dota 2",
   "League of Legends",
   "ARC Raiders",
-  "Battlefield 6", 
+  "Battlefield 5",
 ];
 
 export default async function HomePage() {
