@@ -1,8 +1,13 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { LobbyStatus, MemberStatus } from "@prisma/client";
+import {
+  LobbyStatus,
+  MemberStatus,
+  MemberRole,
+} from "@prisma/client";
 import {
   Card,
   CardHeader,
@@ -14,16 +19,104 @@ import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
+/* -------------------------------------------------------------------------- */
+/*                               SERVER ACTIONS                               */
+/* -------------------------------------------------------------------------- */
+
+async function updateLobbyAction(formData: FormData) {
+  "use server";
+
+  const user = await getCurrentUser();
+  if (!user?.id) return;
+
+  const lobbyId = String(formData.get("lobbyId") || "").trim();
+  if (!lobbyId) return;
+
+  const title = String(formData.get("title") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+  const language = String(formData.get("language") || "").trim();
+  const region = String(formData.get("region") || "").trim();
+  const maxPlayersRaw = formData.get("maxPlayers");
+  const statusStr = String(formData.get("status") || "").trim();
+
+  // garante que só o dono pode editar
+  const lobby = await prisma.lobby.findUnique({
+    where: { id: lobbyId },
+    select: { ownerId: true },
+  });
+
+  if (!lobby || lobby.ownerId !== user.id) return;
+
+  const data: any = {};
+
+  if (title) data.title = title;
+  data.description = description || null;
+  data.language = language || null;
+  data.region = region || null;
+
+  const maxPlayersNum = Number(maxPlayersRaw);
+  if (!Number.isNaN(maxPlayersNum) && maxPlayersNum > 0) {
+    data.maxPlayers = maxPlayersNum;
+  }
+
+  if (statusStr && (statusStr in LobbyStatus)) {
+    data.status = statusStr as LobbyStatus;
+  }
+
+  await prisma.lobby.update({
+    where: { id: lobbyId },
+    data,
+  });
+
+  revalidatePath(`/lobbies/${lobbyId}`);
+  redirect(`/lobbies/${lobbyId}`);
+}
+
+async function kickMemberAction(formData: FormData) {
+  "use server";
+
+  const user = await getCurrentUser();
+  if (!user?.id) return;
+
+  const lobbyId = String(formData.get("lobbyId") || "").trim();
+  const memberId = String(formData.get("memberId") || "").trim();
+  if (!lobbyId || !memberId) return;
+
+  // garante que só o dono pode kikar
+  const lobby = await prisma.lobby.findUnique({
+    where: { id: lobbyId },
+    select: { ownerId: true },
+  });
+
+  if (!lobby || lobby.ownerId !== user.id) return;
+
+  // só permite kikar membros ativos e que NÃO são líder
+  await prisma.lobbyMember.updateMany({
+    where: {
+      id: memberId,
+      lobbyId,
+      status: MemberStatus.ACTIVE,
+      role: MemberRole.MEMBER,
+    },
+    data: {
+      status: MemberStatus.KICKED,
+    },
+  });
+
+  revalidatePath(`/lobbies/${lobbyId}`);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  PAGE                                      */
+/* -------------------------------------------------------------------------- */
+
 type PageProps =
   | { params: { lobbyId: string } }
   | { params: Promise<{ lobbyId: string }> };
 
 export default async function LobbyDetailPage(props: PageProps) {
-  // ---------------------------------------------------------------------------
-  // 1) Resolve params mesmo se vier como Promise / thenable
-  // ---------------------------------------------------------------------------
+  // resolve params mesmo se vierem como Promise/thenable
   let rawParams: any = (props as any).params;
-
   if (rawParams && typeof rawParams.then === "function") {
     rawParams = await rawParams;
   }
@@ -32,7 +125,6 @@ export default async function LobbyDetailPage(props: PageProps) {
 
   console.log("LOBBY DETAIL - resolved params:", rawParams, "lobbyId:", lobbyId);
 
-  // segurança básica: garante string válida
   if (!lobbyId || typeof lobbyId !== "string") {
     return (
       <div className="max-w-3xl mx-auto py-10 space-y-4">
@@ -47,9 +139,6 @@ export default async function LobbyDetailPage(props: PageProps) {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // 2) Busca lobby + usuário
-  // ---------------------------------------------------------------------------
   const [user, lobby] = await Promise.all([
     getCurrentUser(),
     prisma.lobby.findUnique({
@@ -74,11 +163,9 @@ export default async function LobbyDetailPage(props: PageProps) {
 
   const currentPlayers = lobby.members.length;
   const isFull =
-    currentPlayers >= lobby.maxPlayers || lobby.status === LobbyStatus.FULL;
+    currentPlayers >= lobby.maxPlayers ||
+    lobby.status === LobbyStatus.FULL;
 
-  // ---------------------------------------------------------------------------
-  // 3) Layout bonitinho
-  // ---------------------------------------------------------------------------
   return (
     <div className="max-w-5xl mx-auto space-y-6 py-6">
       {/* topo */}
@@ -89,6 +176,12 @@ export default async function LobbyDetailPage(props: PageProps) {
           </h1>
           <p className="text-sm text-slate-400">
             {lobby.game.name} • {lobby.game.platform}
+          </p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Dono da sala:{" "}
+            <span className="font-medium text-slate-300">
+              {lobby.owner.username || lobby.owner.name || "Jogador"}
+            </span>
           </p>
         </div>
 
@@ -163,8 +256,33 @@ export default async function LobbyDetailPage(props: PageProps) {
                       {meId === m.userId ? " • você" : ""}
                     </span>
                   </div>
+
+                  {/* botão de kikar visível só pro líder e só em membros comuns */}
+                  {isLeader && m.role !== "LEADER" && (
+                    <form action={kickMemberAction}>
+                      <input
+                        type="hidden"
+                        name="lobbyId"
+                        value={lobby.id}
+                      />
+                      <input
+                        type="hidden"
+                        name="memberId"
+                        value={m.id}
+                      />
+                      <Button
+                        type="submit"
+                        size="xs"
+                        variant="outline"
+                        className="text-[11px]"
+                      >
+                        Expulsar
+                      </Button>
+                    </form>
+                  )}
                 </div>
               ))}
+
               {lobby.members.length === 0 && (
                 <p className="text-xs text-slate-500">
                   Ninguém conectado ainda.
@@ -175,17 +293,132 @@ export default async function LobbyDetailPage(props: PageProps) {
 
           {isLeader && (
             <p className="text-[11px] text-sky-300">
-              Você é o líder deste lobby. Em breve você poderá configurar
-              permissões, enviar convites rápidos e fechar a sala por aqui.
+              Você é o líder deste lobby. Você pode editar os detalhes da sala e
+              expulsar jogadores se necessário.
             </p>
           )}
 
           <p className="text-[10px] text-slate-500 pt-2">
             ID do lobby:{" "}
-            <span className="font-mono">
-              {lobby.id}
-            </span>
+            <span className="font-mono">{lobby.id}</span>
           </p>
+
+          {/* ------------------------------------------------------------------ */}
+          {/*                 BLOCO DE CONTROLES DO LÍDER                        */}
+          {/* ------------------------------------------------------------------ */}
+          {isLeader && (
+            <details className="mt-4 rounded-md border border-slate-800 bg-slate-950/70">
+              <summary className="cursor-pointer select-none text-xs px-3 py-2 text-slate-200">
+                Opções do líder (editar sala)
+              </summary>
+              <div className="px-3 pb-3 pt-2 space-y-3 text-xs">
+                <form action={updateLobbyAction} className="space-y-3">
+                  <input
+                    type="hidden"
+                    name="lobbyId"
+                    value={lobby.id}
+                  />
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-400">
+                        Título da sala
+                      </label>
+                      <input
+                        name="title"
+                        defaultValue={lobby.title}
+                        className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-400">
+                        Máx. jogadores
+                      </label>
+                      <input
+                        type="number"
+                        name="maxPlayers"
+                        min={1}
+                        max={99}
+                        defaultValue={lobby.maxPlayers}
+                        className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-slate-400">
+                      Descrição
+                    </label>
+                    <textarea
+                      name="description"
+                      defaultValue={lobby.description ?? ""}
+                      rows={3}
+                      className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+                    />
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-400">
+                        Idioma
+                      </label>
+                      <input
+                        name="language"
+                        defaultValue={lobby.language ?? ""}
+                        placeholder="pt-BR, en, es..."
+                        className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-400">
+                        Região
+                      </label>
+                      <input
+                        name="region"
+                        defaultValue={lobby.region ?? ""}
+                        placeholder="BR, NA, EU..."
+                        className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-400">
+                        Status da sala
+                      </label>
+                      <select
+                        name="status"
+                        defaultValue={lobby.status}
+                        className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-600/50"
+                      >
+                        <option value="OPEN">OPEN (aceitando players)</option>
+                        <option value="FULL">FULL (lotado)</option>
+                        <option value="CLOSED">
+                          CLOSED (sala fechada)
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="text-xs px-3"
+                    >
+                      Salvar alterações
+                    </Button>
+                  </div>
+                </form>
+
+                <p className="text-[10px] text-slate-500 pt-1">
+                  Em breve: transferir liderança, sistema de convite rápido,
+                  integração com voz, etc.
+                </p>
+              </div>
+            </details>
+          )}
         </CardContent>
       </Card>
     </div>
