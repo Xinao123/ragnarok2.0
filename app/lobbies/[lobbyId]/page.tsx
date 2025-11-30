@@ -68,7 +68,10 @@ async function updateLobbyAction(formData: FormData) {
     data,
   });
 
+  // revalida página de detalhe E a listagem geral de lobbies
   revalidatePath(`/lobbies/${lobbyId}`);
+  revalidatePath("/lobbies");
+
   redirect(`/lobbies/${lobbyId}`);
 }
 
