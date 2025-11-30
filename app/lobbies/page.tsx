@@ -30,7 +30,7 @@ async function createLobbyAction(formData: FormData) {
     redirect("/auth/login");
   }
 
-  // 1) Dados que já existiam
+  // Campos comuns do form
   const gameIdFromForm = String(formData.get("gameId") || "").trim();
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
@@ -38,16 +38,24 @@ async function createLobbyAction(formData: FormData) {
   const language = String(formData.get("language") || "").trim();
   const region = String(formData.get("region") || "").trim();
 
-  // 2) Campos vindos da escolha RAWG (vamos usar se não tiver gameId)
+  // Campos vindos do GameSearchInput (RAWG)
   const rawgIdStr = String(formData.get("rawgId") || "").trim();
-  const rawgName = String(formData.get("gameName") || "").trim();
-  const rawgSlug = String(formData.get("gameSlug") || "").trim();
-  const rawgPlatform = String(formData.get("gamePlatform") || "").trim();
+
+  // >>> aqui usamos exatamente os names do GameSearchInput:
+  const rawgName = String(
+    formData.get("rawgName") || formData.get("gameName") || ""
+  ).trim();
+  const rawgPlatform = String(
+    formData.get("rawgPlatform") || formData.get("gamePlatform") || ""
+  ).trim();
   const rawgBgImage = String(
-    formData.get("gameBackgroundImageUrl") || ""
+    formData.get("rawgImage") ||
+    formData.get("gameBackgroundImageUrl") ||
+    ""
   ).trim();
 
   const maxPlayers = Number(maxPlayersRaw);
+
   if (!title) {
     throw new Error("Defina um título para o lobby.");
   }
@@ -55,9 +63,11 @@ async function createLobbyAction(formData: FormData) {
     throw new Error("Número de jogadores inválido.");
   }
 
-  // 3) Garantir que temos um gameId:
-  //    - se veio do form (jogo já salvo) usamos direto
-  //    - se NÃO veio, mas temos rawgId, criamos/atualizamos na tabela Game
+  // ----------------------------------------------------------------------------
+  // Garantir que temos um gameId:
+  // - se veio direto (jogo já existente no banco), usamos ele
+  // - se não veio, mas temos rawgId => criamos/atualizamos Game por rawgId
+  // ----------------------------------------------------------------------------
   let gameId = gameIdFromForm;
 
   if (!gameId && rawgIdStr) {
@@ -66,17 +76,26 @@ async function createLobbyAction(formData: FormData) {
       throw new Error("Jogo inválido (RAWG ID incorreto).");
     }
 
+    // gera um slug simples a partir do nome, se existir
+    const slugFromName =
+      rawgName
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || `rawg-${rawgIdNum}`;
+
     const game = await prisma.game.upsert({
       where: { rawgId: rawgIdNum },
       update: {
         name: rawgName || undefined,
-        slug: rawgSlug || undefined,
+        slug: slugFromName || undefined,
         platform: rawgPlatform || undefined,
         backgroundImageUrl: rawgBgImage || undefined,
       },
       create: {
         name: rawgName || "Jogo desconhecido",
-        slug: rawgSlug || `rawg-${rawgIdNum}`,
+        slug: slugFromName,
         platform: rawgPlatform || "Multi",
         rawgId: rawgIdNum,
         backgroundImageUrl: rawgBgImage || null,
@@ -86,11 +105,13 @@ async function createLobbyAction(formData: FormData) {
     gameId = game.id;
   }
 
-  // se mesmo assim não tiver gameId, aí sim erro
   if (!gameId) {
     throw new Error("Selecione um jogo para o lobby.");
   }
 
+  // ----------------------------------------------------------------------------
+  // Criação do lobby + membro líder
+  // ----------------------------------------------------------------------------
   let newLobbyId = "";
 
   await prisma.$transaction(async (tx) => {
@@ -119,10 +140,10 @@ async function createLobbyAction(formData: FormData) {
     });
   });
 
-  // revalida listagem e joga o usuário pra página do lobby
   revalidatePath("/lobbies");
   redirect(`/lobbies/${newLobbyId}`);
 }
+
 
 
 async function joinLobbyAction(formData: FormData) {
