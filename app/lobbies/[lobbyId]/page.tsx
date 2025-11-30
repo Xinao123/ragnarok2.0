@@ -3,18 +3,24 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { LobbyStatus, MemberStatus } from "@prisma/client";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 type PageProps = {
-  params: { lobbyId: string };
+  params: { lobbyId?: string; id?: string };
 };
 
 export default async function LobbyDetailPage({ params }: PageProps) {
-  const lobbyId = params?.lobbyId;
+  const lobbyId = params?.lobbyId ?? params?.id ?? "";
 
-  // segurança básica: garante string válida
-  if (!lobbyId || typeof lobbyId !== "string") {
+  // se mesmo assim não tiver id, aí sim mostramos erro
+  if (!lobbyId) {
     return (
       <div className="max-w-3xl mx-auto py-10 space-y-4">
         <h1 className="text-2xl font-semibold">Lobby inválido</h1>
@@ -44,7 +50,6 @@ export default async function LobbyDetailPage({ params }: PageProps) {
   ]);
 
   if (!lobby) {
-    // 404 padrão do Next
     notFound();
   }
 
@@ -53,8 +58,7 @@ export default async function LobbyDetailPage({ params }: PageProps) {
 
   const currentPlayers = lobby.members.length;
   const isFull =
-    currentPlayers >= lobby.maxPlayers ||
-    lobby.status === LobbyStatus.FULL;
+    currentPlayers >= lobby.maxPlayers || lobby.status === LobbyStatus.FULL;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 py-6">
@@ -71,11 +75,10 @@ export default async function LobbyDetailPage({ params }: PageProps) {
 
         <div className="flex flex-col items-end gap-2">
           <span
-            className={`text-[11px] px-2 py-0.5 rounded-full border ${
-              isFull
-                ? "border-red-500/50 text-red-300 bg-red-900/20"
-                : "border-emerald-500/50 text-emerald-300 bg-emerald-900/10"
-            }`}
+            className={`text-[11px] px-2 py-0.5 rounded-full border ${isFull
+              ? "border-red-500/50 text-red-300 bg-red-900/20"
+              : "border-emerald-500/50 text-emerald-300 bg-emerald-900/10"
+              }`}
           >
             {lobby.status} • {currentPlayers}/{lobby.maxPlayers}
           </span>
@@ -159,8 +162,7 @@ export default async function LobbyDetailPage({ params }: PageProps) {
           )}
 
           <p className="text-[10px] text-slate-500 pt-2">
-            ID do lobby:{" "}
-            <span className="font-mono">{lobby.id}</span>
+            ID do lobby: <span className="font-mono">{lobby.id}</span>
           </p>
         </CardContent>
       </Card>
