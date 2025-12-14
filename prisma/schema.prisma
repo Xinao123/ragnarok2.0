@@ -4,9 +4,10 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")   // pooler (6543) -> app em produção
-  directUrl = env("DIRECT_URL")     // conexão direta (5432) -> migrations
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
 }
+
 
 
 model User {
