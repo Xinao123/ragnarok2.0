@@ -28,6 +28,14 @@ let pusherClient: PusherClient | null = null;
 export function getPusherClient() {
   if (typeof window === "undefined") return null;
 
+  if (
+    !process.env.NEXT_PUBLIC_PUSHER_KEY ||
+    !process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+  ) {
+    console.warn("[Pusher] Missing NEXT_PUBLIC_PUSHER_KEY/CLUSTER");
+    return null;
+  }
+
   if (!pusherClient) {
     pusherClient = new PusherClient(
       process.env.NEXT_PUBLIC_PUSHER_KEY!,

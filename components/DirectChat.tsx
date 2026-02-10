@@ -30,6 +30,7 @@ export function DirectChat({ conversationId, meId }: Props) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rtError, setRtError] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -50,7 +51,7 @@ export function DirectChat({ conversationId, meId }: Props) {
       const channel = pusher.subscribe(channelName);
 
       // Bind no evento de nova mensagem
-      channel.bind("new-message", (data: DirectMessage) => {
+      const onNewMessage = (data: DirectMessage) => {
         console.log("[DirectChat] Nova mensagem recebida:", data);
         
         setMessages((prev) => {
@@ -60,17 +61,34 @@ export function DirectChat({ conversationId, meId }: Props) {
           }
           return [...prev, data];
         });
-      });
+      };
+
+      const onSubError = (status: any) => {
+        console.error("[DirectChat] Erro de subscrição:", status);
+        setRtError("Falha ao conectar em tempo real.");
+      };
+
+      const onSubSuccess = () => {
+        setRtError(null);
+      };
+
+      const onConnError = (err: any) => {
+        console.error("[DirectChat] Erro de conexão:", err);
+        setRtError("Erro de conexão em tempo real.");
+      };
+
+      channel.bind("new-message", onNewMessage);
+      channel.bind("pusher:subscription_error", onSubError);
+      channel.bind("pusher:subscription_succeeded", onSubSuccess);
+      pusher.connection.bind("error", onConnError);
 
       // Log de erros de conexão
-      channel.bind("pusher:subscription_error", (status: any) => {
-        console.error("[DirectChat] Erro de subscrição:", status);
-        setError("Não foi possível conectar ao chat em tempo real.");
-      });
-
       // Cleanup
       return () => {
-        channel.unbind_all();
+        channel.unbind("new-message", onNewMessage);
+        channel.unbind("pusher:subscription_error", onSubError);
+        channel.unbind("pusher:subscription_succeeded", onSubSuccess);
+        pusher.connection.unbind("error", onConnError);
         pusher.unsubscribe(channelName);
       };
     } catch (err) {
@@ -315,11 +333,16 @@ export function DirectChat({ conversationId, meId }: Props) {
       </div>
 
       {/* Error bar */}
-      {error && !loading && (
-        <div className="px-3 py-1 bg-rose-950/40 border-t border-rose-800/60">
-          <p className="text-[10px] text-rose-300">{error}</p>
-        </div>
-      )}
+  {error && !loading && (
+    <div className="px-3 py-1 bg-rose-950/40 border-t border-rose-800/60">
+      <p className="text-[10px] text-rose-300">{error}</p>
+    </div>
+  )}
+  {rtError && !loading && (
+    <div className="px-3 py-1 bg-amber-950/40 border-t border-amber-800/60">
+      <p className="text-[10px] text-amber-300">{rtError}</p>
+    </div>
+  )}
 
       {/* Input */}
       <div className="p-2 border-t border-slate-800 flex items-center gap-2 bg-slate-900/50">

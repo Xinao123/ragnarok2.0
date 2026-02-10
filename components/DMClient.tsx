@@ -90,6 +90,7 @@ export function DMClient({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [rtError, setRtError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -105,18 +106,40 @@ export function DMClient({
     const channel = pusher.subscribe(channelName);
 
     // Listener para novas mensagens
-    channel.bind("new-message", (data: any) => {
+    const onNewMessage = (data: any) => {
       const msg = normalizeMessage(data);
       setMessages((prev) => {
         // Evita duplicatas (otimistic update)
         if (prev.some((m) => m.id === msg.id)) return prev;
         return [...prev, msg];
       });
-    });
+    };
+
+    const onSubscriptionError = (status: any) => {
+      console.error("[DM] Pusher subscription error:", status);
+      setRtError("Falha ao conectar em tempo real.");
+    };
+
+    const onSubscriptionSuccess = () => {
+      setRtError(null);
+    };
+
+    const onConnectionError = (err: any) => {
+      console.error("[DM] Pusher connection error:", err);
+      setRtError("Erro de conexao em tempo real.");
+    };
+
+    channel.bind("new-message", onNewMessage);
+    channel.bind("pusher:subscription_error", onSubscriptionError);
+    channel.bind("pusher:subscription_succeeded", onSubscriptionSuccess);
+    pusher.connection.bind("error", onConnectionError);
 
     // Cleanup
     return () => {
-      channel.unbind_all();
+      channel.unbind("new-message", onNewMessage);
+      channel.unbind("pusher:subscription_error", onSubscriptionError);
+      channel.unbind("pusher:subscription_succeeded", onSubscriptionSuccess);
+      pusher.connection.unbind("error", onConnectionError);
       pusher.unsubscribe(channelName);
     };
   }, [conversationId]);
@@ -325,6 +348,9 @@ export function DMClient({
 
       {error && (
         <div className="px-4 pb-2 text-[12px] text-rose-300">{error}</div>
+      )}
+      {rtError && (
+        <div className="px-4 pb-2 text-[12px] text-amber-300">{rtError}</div>
       )}
 
       {/* Input */}
