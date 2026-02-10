@@ -146,7 +146,12 @@ export async function POST(req: Request) {
     };
 
     // Envia para canal privado da conversa
-    await triggerDM(conversationId, "new-message", messagePayload);
+    // Não bloqueia o envio caso o Pusher falhe
+    try {
+      await triggerDM(conversationId, "new-message", messagePayload);
+    } catch (pusherError) {
+      console.error("[DM] Pusher trigger failed:", pusherError);
+    }
 
     // devolve também já descriptografada pro front
     return NextResponse.json({ message: messagePayload });
