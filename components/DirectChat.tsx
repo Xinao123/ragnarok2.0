@@ -223,10 +223,14 @@ export function DirectChat({ conversationId, meId }: Props) {
 
       const { message } = await res.json();
 
-      // ✅ Substitui mensagem otimista pela real
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? message : m))
-      );
+      // ✅ Se o realtime chegou antes, remove o temp e mantém a real
+      setMessages((prev) => {
+        const hasReal = prev.some((m) => m.id === message.id);
+        if (hasReal) {
+          return prev.filter((m) => m.id !== tempId);
+        }
+        return prev.map((m) => (m.id === tempId ? message : m));
+      });
     } catch (err) {
       console.error("[DirectChat] Erro ao enviar:", err);
       setError("Não foi possível enviar a mensagem.");

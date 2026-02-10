@@ -213,8 +213,10 @@ export function DMClient({
       const { message } = await res.json();
       const saved = normalizeMessage(message);
 
-      // ✅ Otimistic update (antes do Pusher chegar)
-      setMessages((prev) => [...prev, saved]);
+      // ✅ Evita duplicar caso o realtime chegue primeiro
+      setMessages((prev) =>
+        prev.some((m) => m.id === saved.id) ? prev : [...prev, saved]
+      );
 
       setText("");
     } catch (e) {
