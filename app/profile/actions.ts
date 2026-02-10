@@ -7,6 +7,54 @@ import { uploadAvatarToMinio } from "@/lib/storage";
 import { sanitizeText } from "@/lib/sanitize";
 
 
+type ImageMime = "image/jpeg" | "image/png" | "image/webp";
+
+function detectImageMime(buffer: Buffer): ImageMime | null {
+    if (buffer.length < 12) return null;
+
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return "image/jpeg";
+    }
+
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4e &&
+        buffer[3] === 0x47 &&
+        buffer[4] === 0x0d &&
+        buffer[5] === 0x0a &&
+        buffer[6] === 0x1a &&
+        buffer[7] === 0x0a
+    ) {
+        return "image/png";
+    }
+
+    // WEBP: "RIFF"...."WEBP"
+    if (
+        buffer[0] === 0x52 &&
+        buffer[1] === 0x49 &&
+        buffer[2] === 0x46 &&
+        buffer[3] === 0x46 &&
+        buffer[8] === 0x57 &&
+        buffer[9] === 0x45 &&
+        buffer[10] === 0x42 &&
+        buffer[11] === 0x50
+    ) {
+        return "image/webp";
+    }
+
+    return null;
+}
+
+function getExtension(name: string | null | undefined): string | null {
+    if (!name) return null;
+    const parts = name.split(".");
+    if (parts.length < 2) return null;
+    return parts[parts.length - 1].toLowerCase();
+}
+
 export type ProfileFormState = {
     success: boolean;
     message?: string;
@@ -61,20 +109,28 @@ export async function updateProfileAction(
             errors.avatar = "Imagem deve ter no máximo 2MB.";
         }
 
-        const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-        if (!allowedTypes.includes(avatarFile.type)) {
-            errors.avatar = "Formato inválido. Use JPG, PNG ou WEBP.";
-        }
-
         if (!errors.avatar) {
             const arrayBuffer = await avatarFile.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
 
-            avatarUrl = await uploadAvatarToMinio(
-                user.id,
-                buffer,
-                avatarFile.type
-            );
+            const detected = detectImageMime(buffer);
+            if (!detected) {
+                errors.avatar = "Formato inválido. Use JPG, PNG ou WEBP.";
+            } else {
+                const ext = getExtension(avatarFile.name);
+                const allowedExts = ["jpg", "jpeg", "png", "webp"];
+                if (!ext || !allowedExts.includes(ext)) {
+                    errors.avatar = "Extensão inválida. Use JPG, PNG ou WEBP.";
+                }
+            }
+
+            if (!errors.avatar && detected) {
+                avatarUrl = await uploadAvatarToMinio(
+                    user.id,
+                    buffer,
+                    detected
+                );
+            }
         }
     }
 
