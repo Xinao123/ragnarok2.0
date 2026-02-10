@@ -82,6 +82,8 @@ export default async function RootLayout({
                       name: user.name,
                       email: user.email,
                       avatarUrl: user.avatarUrl ?? undefined,
+                      status: user.status,
+                      lastSeen: user.lastSeen,
                     }}
                   />
                 ) : (

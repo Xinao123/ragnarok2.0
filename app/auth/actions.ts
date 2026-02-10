@@ -208,5 +208,7 @@ export async function logoutAction() {
     }
   }
 
-  await signOut({ redirectTo: "/" });
+  // evita redirect absoluto via AUTH_URL incorreto
+  await signOut({ redirect: false });
+  redirect("/");
 }
