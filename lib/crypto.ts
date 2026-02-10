@@ -1,7 +1,16 @@
 import crypto from "crypto";
 
-const KEY_B64 = process.env.CHAT_ENCRYPTION_KEY!;
-const KEY = Buffer.from(KEY_B64, "base64"); // 32 bytes
+const KEY_B64 = process.env.CHAT_ENCRYPTION_KEY;
+if (!KEY_B64) {
+  throw new Error("CHAT_ENCRYPTION_KEY nÃ£o configurada.");
+}
+
+const KEY = Buffer.from(KEY_B64, "base64");
+if (KEY.length !== 32) {
+  throw new Error(
+    "CHAT_ENCRYPTION_KEY invÃ¡lida. Use uma chave base64 de 32 bytes."
+  );
+}
 
 export function encryptMessage(plain: string) {
   const iv = crypto.randomBytes(12); // GCM nonce size

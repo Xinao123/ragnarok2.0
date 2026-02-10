@@ -4,6 +4,8 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+const DUMMY_HASH = bcrypt.hashSync("ragnarok_dummy_password", 10);
+
 export const { auth, handlers, signIn, signOut } = NextAuth({
     pages: {
         // nossa página de login custom
@@ -33,6 +35,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
                 });
 
                 if (!user || !user.passwordHash) {
+                    // evita timing attacks por usuÃ¡rio inexistente
+                    await bcrypt.compare(credentials.password, DUMMY_HASH);
                     return null;
                 }
 
