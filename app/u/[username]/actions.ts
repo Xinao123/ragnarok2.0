@@ -18,7 +18,7 @@ export async function sendFriendRequestAction(formData: FormData) {
     }
 
     const req = new Request("http://local/friends/request", {
-        headers: new Headers(headers()),
+        headers: new Headers(await headers()),
     });
     const limit = await checkRateLimit(req, friendRequestLimit, currentUser.id);
     if (!limit.success) {

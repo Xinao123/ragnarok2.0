@@ -153,7 +153,7 @@ export async function loginAction(
   }
 
   const req = new Request("http://local/login", {
-    headers: new Headers(headers()),
+    headers: new Headers(await headers()),
   });
   const limit = await checkRateLimit(req, loginLimit);
   if (!limit.success) {
