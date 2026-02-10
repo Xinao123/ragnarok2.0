@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { sanitizeText, sanitizeURL } from "@/lib/sanitize";
 import {
   LobbyStatus,
   MemberRole,
@@ -32,27 +33,33 @@ async function createLobbyAction(formData: FormData) {
 
   // Campos comuns do form
   const gameIdFromForm = String(formData.get("gameId") || "").trim();
-  const title = String(formData.get("title") || "").trim();
-  const description = String(formData.get("description") || "").trim();
+  const title = sanitizeText(String(formData.get("title") || ""));
+  const description = sanitizeText(String(formData.get("description") || ""));
   const maxPlayersRaw = formData.get("maxPlayers");
-  const language = String(formData.get("language") || "").trim();
-  const region = String(formData.get("region") || "").trim();
+  const language = sanitizeText(String(formData.get("language") || ""));
+  const region = sanitizeText(String(formData.get("region") || ""));
 
   // Campos vindos do GameSearchInput (RAWG)
   const rawgIdStr = String(formData.get("rawgId") || "").trim();
 
   // >>> aqui usamos exatamente os names do GameSearchInput:
-  const rawgName = String(
+  const rawgName = sanitizeText(
+    String(
     formData.get("rawgName") || formData.get("gameName") || ""
-  ).trim();
-  const rawgPlatform = String(
+    )
+  );
+  const rawgPlatform = sanitizeText(
+    String(
     formData.get("rawgPlatform") || formData.get("gamePlatform") || ""
-  ).trim();
-  const rawgBgImage = String(
-    formData.get("rawgImage") ||
-    formData.get("gameBackgroundImageUrl") ||
-    ""
-  ).trim();
+    )
+  );
+  const rawgBgImage = sanitizeURL(
+    String(
+      formData.get("rawgImage") ||
+      formData.get("gameBackgroundImageUrl") ||
+      ""
+    )
+  );
 
   const maxPlayers = Number(maxPlayersRaw);
 

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { encryptMessage, decryptMessage } from "@/lib/crypto";
 import { triggerDM } from "@/lib/pusher";
 import { checkRateLimit, dmRateLimit } from "@/lib/rate-limit";
+import { sanitizeFull } from "@/lib/sanitize";
 
 // LISTAR mensagens (já descriptografadas)
 export async function GET(req: Request) {
@@ -92,7 +93,9 @@ export async function POST(req: Request) {
       content?: string;
     };
 
-    if (!conversationId || !content?.trim()) {
+    const cleanedContent = sanitizeFull(content);
+
+    if (!conversationId || !cleanedContent.trim()) {
       return NextResponse.json(
         { error: "conversationId and content are required" },
         { status: 400 }
@@ -114,7 +117,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const enc = encryptMessage(content);
+    const enc = encryptMessage(cleanedContent);
 
     const msg = await prisma.directMessage.create({
       data: {
@@ -144,7 +147,7 @@ export async function POST(req: Request) {
       id: msg.id,
       conversationId: msg.conversationId,
       fromUserId: msg.fromUserId,
-      content, // plaintext (só vai pra membros autorizados)
+      content: cleanedContent, // plaintext (só vai pra membros autorizados)
       algorithm: msg.algorithm,
       createdAt: msg.createdAt,
       editedAt: msg.editedAt,

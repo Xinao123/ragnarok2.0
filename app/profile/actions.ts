@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import type { User } from "@prisma/client";
 import { uploadAvatarToMinio } from "@/lib/storage";
+import { sanitizeText } from "@/lib/sanitize";
 
 
 export type ProfileFormState = {
@@ -35,8 +36,11 @@ export async function updateProfileAction(
         };
     }
 
-    const name = (formData.get("name") ?? "").toString().trim();
-    const bio = (formData.get("bio") ?? "").toString().trim();
+    const rawName = (formData.get("name") ?? "").toString();
+    const rawBio = (formData.get("bio") ?? "").toString();
+
+    const name = sanitizeText(rawName);
+    const bio = sanitizeText(rawBio);
     const avatarFile = formData.get("avatar") as File | null;
 
     const errors: ProfileFormState["errors"] = {};

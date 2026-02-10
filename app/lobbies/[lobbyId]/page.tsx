@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { sanitizeText } from "@/lib/sanitize";
 import {
   LobbyStatus,
   MemberStatus,
@@ -32,10 +33,10 @@ async function updateLobbyAction(formData: FormData) {
   const lobbyId = String(formData.get("lobbyId") || "").trim();
   if (!lobbyId) return;
 
-  const title = String(formData.get("title") || "").trim();
-  const description = String(formData.get("description") || "").trim();
-  const language = String(formData.get("language") || "").trim();
-  const region = String(formData.get("region") || "").trim();
+  const title = sanitizeText(String(formData.get("title") || ""));
+  const description = sanitizeText(String(formData.get("description") || ""));
+  const language = sanitizeText(String(formData.get("language") || ""));
+  const region = sanitizeText(String(formData.get("region") || ""));
   const maxPlayersRaw = formData.get("maxPlayers");
   const statusStr = String(formData.get("status") || "").trim();
 
