@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getSocket } from "@/lib/socket-client";
+import { getPusherClient } from "@/lib/pusher";
 import { SendHorizonal } from "lucide-react";
 
 type OtherUser = {
@@ -94,12 +94,36 @@ export function DMClient({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
-
+  // =============================
+  // ✅ PUSHER CLIENT
+  // =============================
   useEffect(() => {
-    socketRef.current = getSocket(meId);
-  }, [meId]);
+    const pusher = getPusherClient();
+    if (!pusher) return;
 
+    const channelName = `private-dm-${conversationId}`;
+    const channel = pusher.subscribe(channelName);
+
+    // Listener para novas mensagens
+    channel.bind("new-message", (data: any) => {
+      const msg = normalizeMessage(data);
+      setMessages((prev) => {
+        // Evita duplicatas (otimistic update)
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    });
+
+    // Cleanup
+    return () => {
+      channel.unbind_all();
+      pusher.unsubscribe(channelName);
+    };
+  }, [conversationId]);
+
+  // =============================
+  // CARREGAR HISTÓRICO
+  // =============================
   async function loadMessages() {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -133,40 +157,14 @@ export function DMClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
-  useEffect(() => {
-    const socket = socketRef.current;
-    if (!socket || !conversationId) return;
-
-    const joinRoom = () => {
-      socket.emit("dm:join", { conversationId });
-    };
-
-    if (socket.connected) joinRoom();
-    socket.on("connect", joinRoom);
-
-    const onNew = (raw: any) => {
-      const msg = normalizeMessage(raw);
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        return [...prev, msg];
-      });
-    };
-
-    socket.on("dm:new", onNew);
-    socket.on("dm:message", onNew);
-
-    return () => {
-      socket.off("connect", joinRoom);
-      socket.off("dm:new", onNew);
-      socket.off("dm:message", onNew);
-      socket.emit("dm:leave", { conversationId });
-    };
-  }, [conversationId]);
-
+  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // =============================
+  // ENVIAR MENSAGEM
+  // =============================
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = text.trim();
@@ -187,9 +185,8 @@ export function DMClient({
       const { message } = await res.json();
       const saved = normalizeMessage(message);
 
+      // ✅ Otimistic update (antes do Pusher chegar)
       setMessages((prev) => [...prev, saved]);
-
-      socketRef.current?.emit("dm:send", { ...saved, conversationId });
 
       setText("");
     } catch (e) {
@@ -201,10 +198,9 @@ export function DMClient({
   }
 
   return (
-    // ✅ overflow-visible pra dropdown do header não ser cortado
     <div className="relative w-full h-[70vh] md:h-[75vh] flex flex-col rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 overflow-visible shadow-2xl">
       
-      {/* ✅ Header com z alto + overflow visível */}
+      {/* Header */}
       <div className="relative z-30 flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-950/70 backdrop-blur overflow-visible">
         <Avatar
           url={otherUser?.avatarUrl}
@@ -220,14 +216,9 @@ export function DMClient({
             @{otherUser?.username || "player"}
           </span>
         </div>
-
-        {/* teu mini menu fica aqui; por estar no header com z-30 ele vai aparecer por cima */}
-        {/* exemplo:
-          <YourHeaderMenu className="ml-auto" />
-        */}
       </div>
 
-      {/* ✅ Messages com scrollbar melhor (z menor que o header) */}
+      {/* Messages */}
       <div
         className="
           relative z-10 flex-1 overflow-y-auto overflow-x-hidden

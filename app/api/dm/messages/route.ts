@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { encryptMessage, decryptMessage } from "@/lib/crypto";
+import { triggerDM } from "@/lib/pusher";
 
 // LISTAR mensagens (já descriptografadas)
 export async function GET(req: Request) {
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
       id: m.id,
       conversationId: m.conversationId,
       fromUserId: m.fromUserId,
-      content: decryptMessage(m.ciphertext, m.iv, m.authTag), // :contentReference[oaicite:3]{index=3}
+      content: decryptMessage(m.ciphertext, m.iv, m.authTag),
       algorithm: m.algorithm,
       createdAt: m.createdAt,
       editedAt: m.editedAt,
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const enc = encryptMessage(content); // :contentReference[oaicite:4]{index=4}
+    const enc = encryptMessage(content);
 
     const msg = await prisma.directMessage.create({
       data: {
@@ -129,20 +130,27 @@ export async function POST(req: Request) {
       data: { updatedAt: new Date() },
     });
 
+    // =============================
+    // ✅ PUSHER: Envia em tempo real
+    // =============================
+    const messagePayload = {
+      id: msg.id,
+      conversationId: msg.conversationId,
+      fromUserId: msg.fromUserId,
+      content, // plaintext (só vai pra membros autorizados)
+      algorithm: msg.algorithm,
+      createdAt: msg.createdAt,
+      editedAt: msg.editedAt,
+      deletedAt: msg.deletedAt,
+      fromUser: msg.fromUser,
+    };
+
+    // Envia para canal privado da conversa
+    await triggerDM(conversationId, "new-message", messagePayload);
+
     // devolve também já descriptografada pro front
-    return NextResponse.json({
-      message: {
-        id: msg.id,
-        conversationId: msg.conversationId,
-        fromUserId: msg.fromUserId,
-        content, // plaintext
-        algorithm: msg.algorithm,
-        createdAt: msg.createdAt,
-        editedAt: msg.editedAt,
-        deletedAt: msg.deletedAt,
-        fromUser: msg.fromUser,
-      },
-    });
+    return NextResponse.json({ message: messagePayload });
+    
   } catch (err) {
     console.error("DM POST error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
