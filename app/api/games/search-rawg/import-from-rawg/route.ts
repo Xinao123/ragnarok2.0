@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { importGameFromRawg } from "@/lib/games";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
@@ -13,6 +14,9 @@ export async function POST(req: Request) {
         { status: 401 }
       );
     }
+
+    const limit = await checkRateLimit(req, apiRateLimit, user.id);
+    if (!limit.success) return limit.response;
 
     const body = await req.json();
     const rawgId = Number(body?.rawgId);

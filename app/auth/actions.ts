@@ -6,6 +6,8 @@ import { auth, signIn, signOut } from "@/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { triggerPresence } from "@/lib/pusher";
+import { headers } from "next/headers";
+import { checkRateLimit, loginLimit } from "@/lib/rate-limit";
 
 export type AuthFormState = {
   success: boolean;
@@ -147,6 +149,17 @@ export async function loginAction(
     return {
       success: false,
       errors: { _form: "Informe usuário e senha." },
+    };
+  }
+
+  const req = new Request("http://local/login", {
+    headers: new Headers(headers()),
+  });
+  const limit = await checkRateLimit(req, loginLimit);
+  if (!limit.success) {
+    return {
+      success: false,
+      errors: { _form: "Muitas tentativas. Tente novamente em alguns minutos." },
     };
   }
 

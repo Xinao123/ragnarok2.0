@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 export async function GET(req: Request) {
+    const limit = await checkRateLimit(req, apiRateLimit);
+    if (!limit.success) return limit.response;
+
     const { searchParams } = new URL(req.url);
     const q = searchParams.get("q") ?? "";
     const query = q.trim();

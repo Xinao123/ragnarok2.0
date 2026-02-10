@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { triggerPresence } from "@/lib/pusher";
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
+import { checkRateLimit, statusChangeLimit } from "@/lib/rate-limit";
 
 const ALLOWED = ["ONLINE", "AWAY", "BUSY", "INVISIBLE", "OFFLINE"] as const;
 type StatusValue = (typeof ALLOWED)[number];
@@ -13,6 +14,9 @@ export async function POST(req: Request) {
   if (!meId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  const limit = await checkRateLimit(req, statusChangeLimit, meId);
+  if (!limit.success) return limit.response;
 
   const body = await req.json().catch(() => ({}));
   const status = body?.status as StatusValue | undefined;

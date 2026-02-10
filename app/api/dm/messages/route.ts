@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { encryptMessage, decryptMessage } from "@/lib/crypto";
 import { triggerDM } from "@/lib/pusher";
+import { checkRateLimit, dmRateLimit } from "@/lib/rate-limit";
 
 // LISTAR mensagens (já descriptografadas)
 export async function GET(req: Request) {
@@ -13,6 +14,9 @@ export async function GET(req: Request) {
     if (!me) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limit = await checkRateLimit(req, dmRateLimit, me);
+    if (!limit.success) return limit.response;
 
     const { searchParams } = new URL(req.url);
     const conversationId = searchParams.get("conversationId");
@@ -78,6 +82,9 @@ export async function POST(req: Request) {
     if (!me) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limit = await checkRateLimit(req, dmRateLimit, me);
+    if (!limit.success) return limit.response;
 
     const body = await req.json();
     const { conversationId, content } = body as {

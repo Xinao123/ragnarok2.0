@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 const RAWG_BASE = "https://api.rawg.io/api";
 
 export async function GET(req: Request) {
+  const limit = await checkRateLimit(req, apiRateLimit);
+  if (!limit.success) return limit.response;
+
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") || "";
   const page = searchParams.get("page") || "1";

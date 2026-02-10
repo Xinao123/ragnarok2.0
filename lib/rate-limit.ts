@@ -4,6 +4,13 @@ import { Redis } from "@upstash/redis";
 // =============================
 // CONFIGURAÇÃO REDIS
 // =============================
+const hasUpstashConfig = Boolean(
+  process.env.UPSTASH_REDIS_REST_URL &&
+    process.env.UPSTASH_REDIS_REST_TOKEN
+);
+
+let warnedMissingConfig = false;
+
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL || "",
   token: process.env.UPSTASH_REDIS_REST_TOKEN || "",
@@ -121,10 +128,41 @@ export async function checkRateLimit(
   limiter: Ratelimit,
   identifier?: string
 ) {
+  if (!hasUpstashConfig) {
+    if (!warnedMissingConfig) {
+      console.warn(
+        "[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN ausentes. Rate limit desativado."
+      );
+      warnedMissingConfig = true;
+    }
+
+    return {
+      success: true,
+      remaining: Number.POSITIVE_INFINITY,
+      limit: Number.POSITIVE_INFINITY,
+      reset: Date.now(),
+    };
+  }
+
   const ip = getClientIP(req);
   const key = identifier || ip;
 
-  const { success, limit, remaining, reset } = await limiter.limit(key);
+  let success: boolean;
+  let limit: number;
+  let remaining: number;
+  let reset: number;
+
+  try {
+    ({ success, limit, remaining, reset } = await limiter.limit(key));
+  } catch (err) {
+    console.error("[rate-limit] Erro ao consultar Upstash:", err);
+    return {
+      success: true,
+      remaining: Number.POSITIVE_INFINITY,
+      limit: Number.POSITIVE_INFINITY,
+      reset: Date.now(),
+    };
+  }
 
   if (!success) {
     const retryAfter = Math.ceil((reset - Date.now()) / 1000);

@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { checkRateLimit, friendRequestLimit } from "@/lib/rate-limit";
 
 export async function sendFriendRequestAction(formData: FormData) {
     const targetUserId = formData.get("targetUserId")?.toString();
@@ -12,6 +14,14 @@ export async function sendFriendRequestAction(formData: FormData) {
 
     // precisa estar logado e ter alvo válido
     if (!currentUser || !targetUserId) {
+        return;
+    }
+
+    const req = new Request("http://local/friends/request", {
+        headers: new Headers(headers()),
+    });
+    const limit = await checkRateLimit(req, friendRequestLimit, currentUser.id);
+    if (!limit.success) {
         return;
     }
 

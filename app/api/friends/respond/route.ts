@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
     const currentUser = await getCurrentUser();
     if (!currentUser) {
         return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }
+
+    const limit = await checkRateLimit(req, apiRateLimit, currentUser.id);
+    if (!limit.success) return limit.response;
 
     let payload: { requestId?: string; action?: string };
     try {
