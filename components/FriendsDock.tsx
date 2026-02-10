@@ -13,6 +13,7 @@ import {
   Send,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getPusherClient } from "@/lib/pusher";
 
 type StatusValue = "ONLINE" | "AWAY" | "BUSY" | "INVISIBLE" | "OFFLINE";
 
@@ -107,6 +108,7 @@ export function FriendsDock() {
   const friends = data?.friends ?? [];
   const incoming = data?.incoming ?? [];
   const outgoing = data?.outgoing ?? [];
+  const friendIds = friends.map((f) => f.id).join("|");
 
   const hasData =
     friends.length > 0 || incoming.length > 0 || outgoing.length > 0;
@@ -159,6 +161,60 @@ export function FriendsDock() {
       clearInterval(interval);
     };
   }, [open, refreshKey]);
+
+  // =============================
+  // Realtime: atualiza status dos amigos via Pusher
+  // =============================
+  useEffect(() => {
+    if (!open || friends.length === 0) return;
+
+    const pusher = getPusherClient();
+    if (!pusher) return;
+
+    const onStatusChanged = (payload: any) => {
+      const userId = payload?.userId as string | undefined;
+      const status = payload?.status as StatusValue | undefined;
+      const lastSeen = payload?.lastSeen as string | undefined;
+
+      if (!userId || !status) return;
+
+      setData((prev) => {
+        if (!prev) return prev;
+        const nextFriends = prev.friends.map((f) =>
+          f.id === userId
+            ? {
+                ...f,
+                status,
+                lastSeen: lastSeen ?? new Date().toISOString(),
+              }
+            : f
+        );
+        return { ...prev, friends: nextFriends };
+      });
+    };
+
+    const onSubError = (status: any) => {
+      console.error("[FriendsDock] Pusher subscription error:", status);
+    };
+
+    const channels: { name: string; channel: any }[] = [];
+
+    friends.forEach((friend) => {
+      const channelName = `presence-user-${friend.id}`;
+      const channel = pusher.subscribe(channelName);
+      channel.bind("status-changed", onStatusChanged);
+      channel.bind("pusher:subscription_error", onSubError);
+      channels.push({ name: channelName, channel });
+    });
+
+    return () => {
+      channels.forEach(({ name, channel }) => {
+        channel.unbind("status-changed", onStatusChanged);
+        channel.unbind("pusher:subscription_error", onSubError);
+        pusher.unsubscribe(name);
+      });
+    };
+  }, [open, friendIds]);
 
   useEffect(() => {
     if (!open) return;

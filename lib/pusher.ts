@@ -72,11 +72,20 @@ export async function triggerDM(
 /**
  * Envia atualização de presença (amigo ficou online)
  */
-export async function triggerPresence(userId: string, status: string) {
+export async function triggerPresence(
+  userId: string,
+  status: string,
+  lastSeen?: Date | string | null
+) {
   const pusher = getPusherServer();
+  const lastSeenIso =
+    lastSeen instanceof Date
+      ? lastSeen.toISOString()
+      : lastSeen ?? null;
+
   await pusher.trigger(
     `presence-user-${userId}`,
     "status-changed",
-    { userId, status }
+    { userId, status, lastSeen: lastSeenIso }
   );
 }

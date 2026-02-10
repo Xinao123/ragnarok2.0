@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { auth, signIn, signOut } from "@/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
+import { triggerPresence } from "@/lib/pusher";
 
 export type AuthFormState = {
   success: boolean;
@@ -31,15 +32,18 @@ async function setOnlineByLogin(loginValue: string) {
     select: { id: true },
   });
 
-  if (!u) return;
+  if (!u) return null;
 
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: u.id },
     data: {
       status: "ONLINE",
       lastSeen: new Date(),
     },
+    select: { id: true, status: true, lastSeen: true },
   });
+
+  return updated;
 }
 
 export async function registerAction(
@@ -120,7 +124,14 @@ export async function registerAction(
   }
 
   // garante presença online (redundante com create, mas ok)
-  await setOnlineByLogin(username);
+  const online = await setOnlineByLogin(username);
+  if (online) {
+    try {
+      await triggerPresence(online.id, "ONLINE", online.lastSeen);
+    } catch (err) {
+      console.error("[auth] Pusher trigger failed:", err);
+    }
+  }
 
   redirect("/");
 }
@@ -164,7 +175,14 @@ export async function loginAction(
   }
 
   // ✅ login ok -> marca ONLINE no banco
-  await setOnlineByLogin(username);
+  const online = await setOnlineByLogin(username);
+  if (online) {
+    try {
+      await triggerPresence(online.id, "ONLINE", online.lastSeen);
+    } catch (err) {
+      console.error("[auth] Pusher trigger failed:", err);
+    }
+  }
 
   redirect("/");
 }
@@ -174,13 +192,20 @@ export async function logoutAction() {
   const meId = (session?.user as any)?.id as string | undefined;
 
   if (meId) {
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id: meId },
       data: {
         status: "OFFLINE",
         lastSeen: new Date(),
       },
+      select: { id: true, status: true, lastSeen: true },
     });
+
+    try {
+      await triggerPresence(updated.id, "OFFLINE", updated.lastSeen);
+    } catch (err) {
+      console.error("[auth] Pusher trigger failed:", err);
+    }
   }
 
   await signOut({ redirectTo: "/" });

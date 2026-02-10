@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { areFriends } from "@/lib/friends";
 import { getPusherServer } from "@/lib/pusher";
 
 type PusherAuthPayload = {
@@ -74,11 +75,14 @@ export async function POST(req: Request) {
     return NextResponse.json(authResponse);
   }
 
-  // ======== Presence channel (future use) ========
+  // ======== Presence channel ========
   if (channel_name.startsWith("presence-user-")) {
     const userId = channel_name.replace("presence-user-", "");
     if (userId !== meId) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      const isFriend = await areFriends(meId, userId);
+      if (!isFriend) {
+        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      }
     }
 
     const user = await prisma.user.findUnique({

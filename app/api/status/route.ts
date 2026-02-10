@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { triggerPresence } from "@/lib/pusher";
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
@@ -20,13 +21,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid status" }, { status: 400 });
   }
 
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: meId },
     data: {
       status,
-      lastSeen: new Date(), // opcional, mas bom pra presença
+      lastSeen: new Date(),
     },
+    select: { id: true, status: true, lastSeen: true },
   });
+
+  // Se estiver invisivel, divulga OFFLINE para os outros
+  const broadcastStatus = status === "INVISIBLE" ? "OFFLINE" : status;
+  try {
+    await triggerPresence(updated.id, broadcastStatus, updated.lastSeen);
+  } catch (err) {
+    console.error("[status] Pusher trigger failed:", err);
+  }
 
   return NextResponse.json({ ok: true, status });
 }
