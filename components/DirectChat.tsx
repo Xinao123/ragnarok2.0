@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { io, Socket } from "socket.io-client";
+import { getPusherClient } from "@/lib/pusher";
 import { useSession } from "next-auth/react";
 
 type ChatUser = {
