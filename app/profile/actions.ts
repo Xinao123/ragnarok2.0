@@ -125,11 +125,17 @@ export async function updateProfileAction(
             }
 
             if (!errors.avatar && detected) {
-                avatarUrl = await uploadAvatarToMinio(
-                    user.id,
-                    buffer,
-                    detected
-                );
+                try {
+                    avatarUrl = await uploadAvatarToMinio(
+                        user.id,
+                        buffer,
+                        detected
+                    );
+                } catch (err) {
+                    console.error("[profile] upload avatar failed:", err);
+                    errors.avatar =
+                        "Falha ao enviar avatar. Verifique as configurações do storage.";
+                }
             }
         }
     }
