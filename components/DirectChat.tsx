@@ -74,7 +74,12 @@ export function DirectChat({ conversationId, meId }: Props) {
 
       const onConnError = (err: any) => {
         console.error("[DirectChat] Erro de conexão:", err);
-        setRtError("Erro de conexão em tempo real.");
+        const data = err?.error?.data;
+        const detail =
+          data?.message || data?.code
+            ? ` (${data?.code ?? "sem-codigo"}: ${data?.message ?? "sem-mensagem"})`
+            : "";
+        setRtError(`Erro de conexão em tempo real.${detail}`);
       };
 
       channel.bind("new-message", onNewMessage);

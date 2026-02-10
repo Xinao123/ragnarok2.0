@@ -126,7 +126,12 @@ export function DMClient({
 
     const onConnectionError = (err: any) => {
       console.error("[DM] Pusher connection error:", err);
-      setRtError("Erro de conexao em tempo real.");
+      const data = err?.error?.data;
+      const detail =
+        data?.message || data?.code
+          ? ` (${data?.code ?? "sem-codigo"}: ${data?.message ?? "sem-mensagem"})`
+          : "";
+      setRtError(`Erro de conexao em tempo real.${detail}`);
     };
 
     channel.bind("new-message", onNewMessage);
