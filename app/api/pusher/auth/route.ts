@@ -15,12 +15,13 @@ async function readBody(req: Request): Promise<PusherAuthPayload> {
     return (await req.json().catch(() => ({}))) as PusherAuthPayload;
   }
 
-  const form = await req.formData().catch(() => null);
-  if (!form) return {};
+  const raw = await req.text().catch(() => "");
+  if (!raw) return {};
 
+  const params = new URLSearchParams(raw);
   return {
-    socket_id: form.get("socket_id")?.toString(),
-    channel_name: form.get("channel_name")?.toString(),
+    socket_id: params.get("socket_id") ?? undefined,
+    channel_name: params.get("channel_name") ?? undefined,
   };
 }
 
