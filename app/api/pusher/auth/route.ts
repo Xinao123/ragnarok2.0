@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { areFriends } from "@/lib/friends";
 import { getPusherServer } from "@/lib/pusher";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 type PusherAuthPayload = {
   socket_id?: string;
@@ -29,6 +30,8 @@ async function readBody(req: Request): Promise<PusherAuthPayload> {
 export async function POST(req: Request) {
   const session = await auth();
   const meId = (session?.user as any)?.id as string | undefined;
+  const limit = await checkRateLimit(req, apiRateLimit, meId);
+  if (!limit.success) return limit.response;
 
   if (!meId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

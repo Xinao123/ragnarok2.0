@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCsrf } from "@/lib/csrf";
 import { logError } from "@/lib/logger";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
     const csrf = await requireCsrf(req);
     if (csrf) return csrf;
+
+    const limit = await checkRateLimit(req, apiRateLimit);
+    if (!limit.success) return limit.response;
 
     const body = await req.json();
     const {
