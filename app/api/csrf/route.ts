@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { CSRF_COOKIE } from "@/lib/csrf-constants";
 
 export async function GET() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   let token = cookieStore.get(CSRF_COOKIE)?.value;
 
   if (!token) {
