@@ -9,7 +9,7 @@ const ALLOWED = ["ONLINE", "AWAY", "BUSY", "INVISIBLE", "OFFLINE"] as const;
 type StatusValue = (typeof ALLOWED)[number];
 
 export async function POST(req: Request) {
-  const csrf = requireCsrf(req);
+  const csrf = await requireCsrf(req);
   if (csrf) return csrf;
 
   const session = await auth();

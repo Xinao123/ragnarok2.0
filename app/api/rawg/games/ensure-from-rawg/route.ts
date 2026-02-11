@@ -4,7 +4,7 @@ import { requireCsrf } from "@/lib/csrf";
 
 export async function POST(req: Request) {
   try {
-    const csrf = requireCsrf(req);
+    const csrf = await requireCsrf(req);
     if (csrf) return csrf;
 
     const body = await req.json();

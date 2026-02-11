@@ -5,7 +5,7 @@ import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { requireCsrf } from "@/lib/csrf";
 
 export async function POST(req: Request) {
-    const csrf = requireCsrf(req);
+    const csrf = await requireCsrf(req);
     if (csrf) return csrf;
 
     const currentUser = await getCurrentUser();

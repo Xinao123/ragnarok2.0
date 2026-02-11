@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCsrf } from "@/lib/csrf";
 
 export async function POST(req: Request) {
-  const csrf = requireCsrf(req);
+  const csrf = await requireCsrf(req);
   if (csrf) return csrf;
 
   const session = await auth();

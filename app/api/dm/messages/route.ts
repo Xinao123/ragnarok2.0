@@ -78,7 +78,7 @@ export async function GET(req: Request) {
 // ENVIAR mensagem
 export async function POST(req: Request) {
   try {
-    const csrf = requireCsrf(req);
+    const csrf = await requireCsrf(req);
     if (csrf) return csrf;
 
     const meUser = await getCurrentUser();
