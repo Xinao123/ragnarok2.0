@@ -1,8 +1,11 @@
-import DOMPurify from "isomorphic-dompurify";
-
 // =============================
 // SANITIZAÇÃO DE HTML/TEXT
 // =============================
+
+function stripTags(input: string): string {
+  // Remove tags HTML de forma simples (adequado para texto puro)
+  return input.replace(/<[^>]*>/g, "");
+}
 
 /**
  * Sanitiza HTML removendo TODOS os scripts e tags perigosas
@@ -19,11 +22,7 @@ import DOMPurify from "isomorphic-dompurify";
 export function sanitizeText(dirty: string | null | undefined): string {
   if (!dirty) return "";
 
-  return DOMPurify.sanitize(dirty, {
-    ALLOWED_TAGS: [], // ✅ Remove TODAS as tags HTML
-    ALLOWED_ATTR: [], // ✅ Remove TODOS os atributos
-    KEEP_CONTENT: true, // ✅ Mantém o texto dentro das tags
-  }).trim();
+  return stripTags(dirty).trim();
 }
 
 /**
@@ -42,22 +41,8 @@ export function sanitizeText(dirty: string | null | undefined): string {
 export function sanitizeMarkdown(dirty: string | null | undefined): string {
   if (!dirty) return "";
 
-  return DOMPurify.sanitize(dirty, {
-    ALLOWED_TAGS: [
-      "p",
-      "br",
-      "strong",
-      "em",
-      "code",
-      "pre",
-      "a",
-      "ul",
-      "ol",
-      "li",
-    ],
-    ALLOWED_ATTR: ["href", "target", "rel"],
-    ALLOWED_URI_REGEXP: /^https?:\/\//i, // Apenas URLs HTTPS
-  });
+  // Sem HTML permitido no backend (para evitar dependência de DOMPurify no server)
+  return stripTags(dirty);
 }
 
 /**
