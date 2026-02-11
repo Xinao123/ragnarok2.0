@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getPusherClient } from "@/lib/pusher";
+import { withCsrf } from "@/lib/csrf-client";
 
 type ChatUser = {
   id: string;
@@ -195,14 +196,17 @@ export function DirectChat({ conversationId, meId }: Props) {
     setText("");
 
     try {
-      const res = await fetch("/api/dm/messages", {
+      const res = await fetch(
+        "/api/dm/messages",
+        await withCsrf({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId,
           content: trimmed,
         }),
-      });
+        })
+      );
 
       if (res.status === 401) {
         setError("Faça login para enviar mensagens.");

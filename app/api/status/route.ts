@@ -3,11 +3,15 @@ import { triggerPresence } from "@/lib/pusher";
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { checkRateLimit, statusChangeLimit } from "@/lib/rate-limit";
+import { requireCsrf } from "@/lib/csrf";
 
 const ALLOWED = ["ONLINE", "AWAY", "BUSY", "INVISIBLE", "OFFLINE"] as const;
 type StatusValue = (typeof ALLOWED)[number];
 
 export async function POST(req: Request) {
+  const csrf = requireCsrf(req);
+  if (csrf) return csrf;
+
   const session = await auth();
   const meId = (session?.user as any)?.id as string | undefined;
 

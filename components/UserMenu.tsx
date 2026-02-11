@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, User, Settings, Check } from "lucide-react";
 import { logoutAction } from "@/app/auth/actions";
+import { withCsrf } from "@/lib/csrf-client";
 
 type StatusValue = "ONLINE" | "AWAY" | "BUSY" | "INVISIBLE" | "OFFLINE";
 
@@ -106,11 +107,14 @@ export function UserMenu({ user }: Props) {
     setCurrentStatus(newStatus); // optimistic
 
     try {
-      const res = await fetch("/api/status", {
+      const res = await fetch(
+        "/api/status",
+        await withCsrf({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
-      });
+        })
+      );
 
       if (!res.ok) {
         setCurrentStatus(user.status ?? "OFFLINE");

@@ -2,9 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
+import { requireCsrf } from "@/lib/csrf";
 
 export async function POST(req: Request) {
   try {
+    const csrf = requireCsrf(req);
+    if (csrf) return csrf;
+
     const me = await getCurrentUser();
     if (!me?.id) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });

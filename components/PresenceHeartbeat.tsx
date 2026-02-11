@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
+import { withCsrf } from "@/lib/csrf-client";
 
 export function PresenceHeartbeat() {
     useEffect(() => {
         const ping = () => {
-            fetch("/api/status/heartbeat", { method: "POST" }).catch(() => { });
+            withCsrf({ method: "POST" })
+                .then((init) => fetch("/api/status/heartbeat", init))
+                .catch(() => { });
         };
 
         // ping imediato

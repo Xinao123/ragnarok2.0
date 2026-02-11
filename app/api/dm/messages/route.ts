@@ -5,6 +5,7 @@ import { encryptMessage, decryptMessage } from "@/lib/crypto";
 import { triggerDM } from "@/lib/pusher";
 import { checkRateLimit, dmRateLimit } from "@/lib/rate-limit";
 import { sanitizeFull } from "@/lib/sanitize";
+import { requireCsrf } from "@/lib/csrf";
 
 // LISTAR mensagens (já descriptografadas)
 export async function GET(req: Request) {
@@ -77,6 +78,9 @@ export async function GET(req: Request) {
 // ENVIAR mensagem
 export async function POST(req: Request) {
   try {
+    const csrf = requireCsrf(req);
+    if (csrf) return csrf;
+
     const meUser = await getCurrentUser();
     const me = meUser?.id;
 

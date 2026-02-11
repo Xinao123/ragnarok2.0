@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { importGameFromRawg } from "@/lib/games";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
+import { requireCsrf } from "@/lib/csrf";
 
 export async function POST(req: Request) {
   try {
+    const csrf = requireCsrf(req);
+    if (csrf) return csrf;
+
     const user = await getCurrentUser();
 
     // opcional: só permitir usuários logados importarem novos jogos

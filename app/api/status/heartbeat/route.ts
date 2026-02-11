@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
+import { requireCsrf } from "@/lib/csrf";
 
-export async function POST() {
+export async function POST(req: Request) {
+  const csrf = requireCsrf(req);
+  if (csrf) return csrf;
+
   const session = await auth();
   const meId = (session?.user as any)?.id as string | undefined;
 

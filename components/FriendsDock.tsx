@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getPusherClient } from "@/lib/pusher";
+import { withCsrf } from "@/lib/csrf-client";
 
 type StatusValue = "ONLINE" | "AWAY" | "BUSY" | "INVISIBLE" | "OFFLINE";
 
@@ -247,11 +248,14 @@ export function FriendsDock() {
     setError(null);
 
     try {
-      const res = await fetch("/api/friends/respond", {
+      const res = await fetch(
+        "/api/friends/respond",
+        await withCsrf({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId, action }),
-      });
+        })
+      );
 
       if (res.status === 401) {
         setError("Faça login para responder solicitações.");
@@ -279,7 +283,9 @@ export function FriendsDock() {
     setError(null);
 
     try {
-      const res = await fetch("/api/dm/open", {
+      const res = await fetch(
+        "/api/dm/open",
+        await withCsrf({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -287,7 +293,8 @@ export function FriendsDock() {
           toUserId: friend.id,    // ✅ fallback (não custa nada)
           username: friend.username ?? undefined,
         }),
-      });
+        })
+      );
 
       if (res.status === 401) {
         router.push(`/auth/login?callbackUrl=${encodeURIComponent(pathname)}`);

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireCsrf } from "@/lib/csrf";
 
 export async function POST(req: Request) {
   try {
+    const csrf = requireCsrf(req);
+    if (csrf) return csrf;
+
     const body = await req.json();
     const {
       rawgId,

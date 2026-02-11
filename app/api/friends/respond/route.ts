@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
+import { requireCsrf } from "@/lib/csrf";
 
 export async function POST(req: Request) {
+    const csrf = requireCsrf(req);
+    if (csrf) return csrf;
+
     const currentUser = await getCurrentUser();
     if (!currentUser) {
         return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getPusherClient } from "@/lib/pusher";
 import { SendHorizonal } from "lucide-react";
+import { withCsrf } from "@/lib/csrf-client";
 
 type OtherUser = {
   id: string;
@@ -202,11 +203,14 @@ export function DMClient({
     setError(null);
 
     try {
-      const res = await fetch("/api/dm/messages", {
+      const res = await fetch(
+        "/api/dm/messages",
+        await withCsrf({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId, content: trimmed }),
-      });
+        })
+      );
 
       if (!res.ok) throw new Error(await res.text());
 

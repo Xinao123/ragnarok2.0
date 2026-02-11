@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { withCsrf } from "@/lib/csrf-client";
 
 export function OpenDMButton({
   otherUserId,
@@ -27,11 +28,14 @@ export function OpenDMButton({
     setErr(null);
 
     try {
-      const res = await fetch("/api/dm/open", {
+      const res = await fetch(
+        "/api/dm/open",
+        await withCsrf({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ otherUserId: targetId }), // ✅ nome certo
-      });
+        })
+      );
 
       // ✅ se não estiver logado, manda pro login
       if (res.status === 401) {
