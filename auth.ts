@@ -8,17 +8,21 @@ const DUMMY_HASH = bcrypt.hashSync("ragnarok_dummy_password", 10);
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
     pages: {
-        // nossa página de login custom
         signIn: "/auth/login",
     },
     session: {
         strategy: "jwt",
+        maxAge: 7 * 24 * 60 * 60, // 7 dias
+        updateAge: 24 * 60 * 60,  // revalida a cada 24h
+    },
+    jwt: {
+        maxAge: 7 * 24 * 60 * 60,
     },
     providers: [
         Credentials({
             name: "credentials",
             credentials: {
-                username: { label: "Usuário", type: "text" },
+                username: { label: "Usuario", type: "text" },
                 password: { label: "Senha", type: "password" },
             },
             async authorize(credentials) {
@@ -55,12 +59,18 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         }),
     ],
     callbacks: {
-        async jwt({ token, user }) {
-            // roda quando o usuário loga / JWT é criado
+        async jwt({ token, user, trigger }) {
             if (user) {
                 token.id = (user as any).id;
                 token.username = (user as any).name;
+                token.iat = Math.floor(Date.now() / 1000);
             }
+
+           
+            if (trigger === "update") {
+                token.iat = Math.floor(Date.now() / 1000);
+            }
+
             return token;
         },
         async session({ session, token }) {
