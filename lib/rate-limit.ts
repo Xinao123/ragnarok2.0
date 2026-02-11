@@ -1,5 +1,6 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { logError } from "@/lib/logger";
 
 // =============================
 // CONFIGURAÇÃO REDIS
@@ -155,7 +156,7 @@ export async function checkRateLimit(
   try {
     ({ success, limit, remaining, reset } = await limiter.limit(key));
   } catch (err) {
-    console.error("[rate-limit] Erro ao consultar Upstash:", err);
+    logError("[rate-limit] Erro ao consultar Upstash:", err);
     return {
       success: true,
       remaining: Number.POSITIVE_INFINITY,

@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { triggerPresence } from "@/lib/pusher";
 import { headers } from "next/headers";
 import { checkRateLimit, loginLimit } from "@/lib/rate-limit";
+import { logError } from "@/lib/logger";
 
 export type AuthFormState = {
   success: boolean;
@@ -131,7 +132,7 @@ export async function registerAction(
     try {
       await triggerPresence(online.id, "ONLINE", online.lastSeen);
     } catch (err) {
-      console.error("[auth] Pusher trigger failed:", err);
+      logError("[auth] Pusher trigger failed:", err);
     }
   }
 
@@ -193,7 +194,7 @@ export async function loginAction(
     try {
       await triggerPresence(online.id, "ONLINE", online.lastSeen);
     } catch (err) {
-      console.error("[auth] Pusher trigger failed:", err);
+      logError("[auth] Pusher trigger failed:", err);
     }
   }
 
@@ -217,7 +218,7 @@ export async function logoutAction() {
     try {
       await triggerPresence(updated.id, "OFFLINE", updated.lastSeen);
     } catch (err) {
-      console.error("[auth] Pusher trigger failed:", err);
+      logError("[auth] Pusher trigger failed:", err);
     }
   }
 

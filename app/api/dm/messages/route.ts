@@ -6,6 +6,7 @@ import { triggerDM } from "@/lib/pusher";
 import { checkRateLimit, dmRateLimit } from "@/lib/rate-limit";
 import { sanitizeFull } from "@/lib/sanitize";
 import { requireCsrf } from "@/lib/csrf";
+import { logError } from "@/lib/logger";
 
 // LISTAR mensagens (já descriptografadas)
 export async function GET(req: Request) {
@@ -70,7 +71,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ messages });
   } catch (err) {
-    console.error("DM messages error:", err);
+    logError("DM messages error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -164,14 +165,14 @@ export async function POST(req: Request) {
     try {
       await triggerDM(conversationId, "new-message", messagePayload);
     } catch (pusherError) {
-      console.error("[DM] Pusher trigger failed:", pusherError);
+      logError("[DM] Pusher trigger failed:", pusherError);
     }
 
     // devolve também já descriptografada pro front
     return NextResponse.json({ message: messagePayload });
     
   } catch (err) {
-    console.error("DM POST error:", err);
+    logError("DM POST error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

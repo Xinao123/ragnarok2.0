@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { leaveLobby } from "@/lib/lobbies";
 import { requireCsrf } from "@/lib/csrf";
 import { checkRateLimit, apiRateLimit } from "@/lib/rate-limit";
+import { logError } from "@/lib/logger";
 
 const ParamsSchema = z.object({
   lobbyId: z.string().cuid(),
@@ -40,7 +41,7 @@ export async function POST(req: Request, context: any) {
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e) {
-    console.error("POST /api/lobbies/[lobbyId]/leave error:", e);
+    logError("POST /api/lobbies/[lobbyId]/leave error:", e);
     return NextResponse.json(
       { error: "Falha ao sair do lobby." },
       { status: 500 }

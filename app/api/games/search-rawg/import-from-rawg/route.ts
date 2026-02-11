@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { importGameFromRawg } from "@/lib/games";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { requireCsrf } from "@/lib/csrf";
+import { logError } from "@/lib/logger";
 
 export async function POST(req: Request) {
   try {
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ game }, { status: 200 });
   } catch (e: any) {
-    console.error("POST /api/games/import-from-rawg error:", e);
+    logError("POST /api/games/import-from-rawg error:", e);
     return NextResponse.json(
       { error: e?.message || "Falha ao importar jogo da RAWG." },
       { status: 500 }

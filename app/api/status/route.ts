@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { checkRateLimit, statusChangeLimit } from "@/lib/rate-limit";
 import { requireCsrf } from "@/lib/csrf";
+import { logError } from "@/lib/logger";
 
 const ALLOWED = ["ONLINE", "AWAY", "BUSY", "INVISIBLE", "OFFLINE"] as const;
 type StatusValue = (typeof ALLOWED)[number];
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
   try {
     await triggerPresence(updated.id, broadcastStatus, updated.lastSeen);
   } catch (err) {
-    console.error("[status] Pusher trigger failed:", err);
+    logError("[status] Pusher trigger failed:", err);
   }
 
   return NextResponse.json({ ok: true, status });

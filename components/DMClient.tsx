@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { getPusherClient } from "@/lib/pusher";
 import { SendHorizonal } from "lucide-react";
 import { withCsrf } from "@/lib/csrf-client";
+import { logError } from "@/lib/logger";
 
 type OtherUser = {
   id: string;
@@ -117,7 +118,7 @@ export function DMClient({
     };
 
     const onSubscriptionError = (status: any) => {
-      console.error("[DM] Pusher subscription error:", status);
+      logError("[DM] Pusher subscription error:", status);
       setRtError("Falha ao conectar em tempo real.");
     };
 
@@ -126,7 +127,7 @@ export function DMClient({
     };
 
     const onConnectionError = (err: any) => {
-      console.error("[DM] Pusher connection error:", err);
+      logError("[DM] Pusher connection error:", err);
       const data = err?.error?.data;
       const detail =
         data?.message || data?.code
@@ -173,7 +174,7 @@ export function DMClient({
       setMessages((json.messages || []).map(normalizeMessage));
     } catch (e: any) {
       if (e?.name === "AbortError") return;
-      console.error(e);
+      logError(e);
       setLoadError("Não foi possível carregar as mensagens.");
     } finally {
       setLoading(false);
@@ -224,7 +225,7 @@ export function DMClient({
 
       setText("");
     } catch (e) {
-      console.error(e);
+      logError(e);
       setError("Não foi possível enviar sua mensagem.");
     } finally {
       setSending(false);

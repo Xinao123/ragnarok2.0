@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { requireCsrf } from "@/lib/csrf";
+import { logError } from "@/lib/logger";
 
 export async function POST(req: Request) {
   try {
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ conversationId: created.id });
   } catch (e) {
-    console.error("dm/open error", e);
+    logError("dm/open error", e);
     return NextResponse.json(
       { error: "internal error" },
       { status: 500 }

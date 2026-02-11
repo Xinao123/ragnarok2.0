@@ -1,3 +1,5 @@
+import { logError } from "@/lib/logger";
+
 const STEAM_STORE_BASE = "https://store.steampowered.com/api";
 const STEAM_WEB_API_BASE = "https://api.steampowered.com";
 
@@ -30,7 +32,7 @@ export async function getSteamAppDetails(
     });
 
     if (!res.ok) {
-        console.error("Erro ao buscar detalhes da Steam:", res.status, res.statusText);
+        logError("Erro ao buscar detalhes da Steam:", res.status, res.statusText);
         return null;
     }
 
@@ -65,7 +67,7 @@ export async function getGlobalAchievements(
     });
 
     if (!res.ok) {
-        console.error(
+        logError(
             "Erro ao buscar conquistas globais da Steam:",
             res.status,
             res.statusText

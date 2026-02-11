@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { logError } from "@/lib/logger";
 import {
     Card,
     CardContent,
@@ -51,7 +52,7 @@ export function PlayersSearch() {
                 setResults(data.users);
             } catch (err: any) {
                 if (err.name !== "AbortError") {
-                    console.error(err);
+                    logError(err);
                 }
             } finally {
                 setIsLoading(false);

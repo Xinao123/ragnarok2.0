@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { joinLobby } from "@/lib/lobbies";
 import { requireCsrf } from "@/lib/csrf";
 import { checkRateLimit, apiRateLimit } from "@/lib/rate-limit";
+import { logError } from "@/lib/logger";
 
 const ParamsSchema = z.object({
   lobbyId: z.string().cuid(),
@@ -40,7 +41,7 @@ export async function POST(req: Request, context: any) {
 
     return NextResponse.json({ result }, { status: 200 });
   } catch (e: any) {
-    console.error("POST /api/lobbies/[lobbyId]/join error:", e);
+    logError("POST /api/lobbies/[lobbyId]/join error:", e);
     const message = e?.message || "Falha ao entrar no lobby.";
     const status =
       message.includes("nÃ£o encontrado") ||

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { LobbyStatus, MemberStatus } from "@prisma/client";
 import { requireCsrf } from "@/lib/csrf";
 import { checkRateLimit, apiRateLimit } from "@/lib/rate-limit";
+import { logError } from "@/lib/logger";
 
 // Lista lobbys (opcional, mas Ãºtil pra futuras integraÃ§Ãµes)
 export async function GET(_req: Request) {
@@ -36,7 +37,7 @@ export async function GET(_req: Request) {
 
     return NextResponse.json({ lobbies }, { status: 200 });
   } catch (e) {
-    console.error("GET /api/lobbies error:", e);
+    logError("GET /api/lobbies error:", e);
     return NextResponse.json(
       { error: "Falha ao listar lobbys." },
       { status: 500 }

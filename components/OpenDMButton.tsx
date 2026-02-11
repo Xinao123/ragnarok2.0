@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { withCsrf } from "@/lib/csrf-client";
+import { logError } from "@/lib/logger";
 
 export function OpenDMButton({
   otherUserId,
@@ -57,7 +58,7 @@ export function OpenDMButton({
 
       router.push(`/dm/${json.conversationId}`);
     } catch (e) {
-      console.error(e);
+      logError(e);
       setErr("Erro de rede ao abrir conversa.");
     } finally {
       setLoading(false);

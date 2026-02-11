@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import type { User } from "@prisma/client";
 import { uploadAvatarToMinio } from "@/lib/storage";
 import { sanitizeText } from "@/lib/sanitize";
+import { logError } from "@/lib/logger";
 
 
 type ImageMime = "image/jpeg" | "image/png" | "image/webp";
@@ -132,7 +133,7 @@ export async function updateProfileAction(
                         detected
                     );
                 } catch (err) {
-                    console.error("[profile] upload avatar failed:", err);
+                    logError("[profile] upload avatar failed:", err);
                     errors.avatar =
                         "Falha ao enviar avatar. Verifique as configurações do storage.";
                 }

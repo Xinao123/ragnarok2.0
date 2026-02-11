@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { logError } from "@/lib/logger";
 
 type InitialGame = {
   id: string;
@@ -87,7 +88,7 @@ export function GameSearchInput({ initialGames }: Props) {
 
         if (!res.ok) {
           const text = await res.text().catch(() => "");
-          console.error("RAWG search error:", res.status, text);
+          logError("RAWG search error:", res.status, text);
           setError("Falha ao buscar jogos.");
           setResults([]);
           return;
@@ -98,7 +99,7 @@ export function GameSearchInput({ initialGames }: Props) {
         setResults(rawResults);
       } catch (e: any) {
         if (e?.name === "AbortError") return;
-        console.error("RAWG search exception:", e);
+        logError("RAWG search exception:", e);
         setError("Erro ao buscar jogos.");
         setResults([]);
       } finally {

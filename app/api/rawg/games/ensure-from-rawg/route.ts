@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCsrf } from "@/lib/csrf";
+import { logError } from "@/lib/logger";
 
 export async function POST(req: Request) {
   try {
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ game }, { status: 200 });
   } catch (e) {
-    console.error("POST /api/games/ensure-from-rawg error:", e);
+    logError("POST /api/games/ensure-from-rawg error:", e);
     return NextResponse.json(
       { error: "Erro ao salvar jogo." },
       { status: 500 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getPusherClient } from "@/lib/pusher";
 import { withCsrf } from "@/lib/csrf-client";
+import { logError } from "@/lib/logger";
 
 type ChatUser = {
   id: string;
@@ -65,7 +66,7 @@ export function DirectChat({ conversationId, meId }: Props) {
       };
 
       const onSubError = (status: any) => {
-        console.error("[DirectChat] Erro de subscrição:", status);
+        logError("[DirectChat] Erro de subscrição:", status);
         setRtError("Falha ao conectar em tempo real.");
       };
 
@@ -74,7 +75,7 @@ export function DirectChat({ conversationId, meId }: Props) {
       };
 
       const onConnError = (err: any) => {
-        console.error("[DirectChat] Erro de conexão:", err);
+        logError("[DirectChat] Erro de conexão:", err);
         const data = err?.error?.data;
         const detail =
           data?.message || data?.code
@@ -98,7 +99,7 @@ export function DirectChat({ conversationId, meId }: Props) {
         pusher.unsubscribe(channelName);
       };
     } catch (err) {
-      console.error("[DirectChat] Erro ao conectar Pusher:", err);
+      logError("[DirectChat] Erro ao conectar Pusher:", err);
       setError("Erro de conexão. Recarregue a página.");
     }
   }, [conversationId]);
@@ -142,7 +143,7 @@ export function DirectChat({ conversationId, meId }: Props) {
         setMessages(json.messages || []);
       } catch (err: any) {
         if (err.name === "AbortError") return;
-        console.error("[DirectChat] Erro ao carregar histórico:", err);
+        logError("[DirectChat] Erro ao carregar histórico:", err);
         setError("Não foi possível carregar as mensagens.");
       } finally {
         setLoading(false);
@@ -236,7 +237,7 @@ export function DirectChat({ conversationId, meId }: Props) {
         return prev.map((m) => (m.id === tempId ? message : m));
       });
     } catch (err) {
-      console.error("[DirectChat] Erro ao enviar:", err);
+      logError("[DirectChat] Erro ao enviar:", err);
       setError("Não foi possível enviar a mensagem.");
       // Remove mensagem otimista
       setMessages((prev) => prev.filter((m) => m.id !== tempId));

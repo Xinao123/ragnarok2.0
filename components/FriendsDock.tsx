@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import { logError } from "@/lib/logger";
 import {
   Users,
   UserPlus,
@@ -139,7 +140,7 @@ export function FriendsDock() {
       setData(json);
     } catch (err: any) {
       if (err.name !== "AbortError") {
-        console.error(err);
+        logError(err);
         setError("Não foi possível carregar os dados agora.");
       }
     } finally {
@@ -195,7 +196,7 @@ export function FriendsDock() {
     };
 
     const onSubError = (status: any) => {
-      console.error("[FriendsDock] Pusher subscription error:", status);
+      logError("[FriendsDock] Pusher subscription error:", status);
     };
 
     const channels: { name: string; channel: any }[] = [];
@@ -267,7 +268,7 @@ export function FriendsDock() {
       setRefreshKey((k) => k + 1);
     } catch (err: any) {
       if (err.name !== "AbortError") {
-        console.error(err);
+        logError(err);
         setError("Não foi possível atualizar a solicitação agora.");
       }
     } finally {
@@ -314,7 +315,7 @@ export function FriendsDock() {
       setOpen(false);
       router.push(`/dm/${json.conversationId}`);
     } catch (e: any) {
-      console.error(e);
+      logError(e);
       setError(
         `Falha ao abrir conversa. (${e?.message || "erro desconhecido"})`
       );

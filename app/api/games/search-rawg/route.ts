@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { searchGames } from "@/lib/rawg";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
+import { logError } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const limit = await checkRateLimit(req, apiRateLimit);
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ results: simplified });
   } catch (e) {
-    console.error("GET /api/games/search-rawg error:", e);
+    logError("GET /api/games/search-rawg error:", e);
     return NextResponse.json(
       { error: "Falha ao buscar jogos na RAWG.", results: [] },
       { status: 500 }

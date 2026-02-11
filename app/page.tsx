@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
+import { logError } from "@/lib/logger";
 import {
   Card,
   CardHeader,
@@ -90,7 +91,7 @@ export default async function HomePage() {
       (g): g is RawgGame => g !== null
     );
   } catch (e) {
-    console.error("RAWG featured games error:", e);
+    logError("RAWG featured games error:", e);
     featuredGames = [];
   }
 
