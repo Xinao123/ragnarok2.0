@@ -38,17 +38,13 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
                     where: { username: credentials.username },
                 });
 
-                if (!user || !user.passwordHash) {
-                    await bcrypt.compare(credentials.password, DUMMY_HASH);
-                    return null;
-                }
-
+                const hashToCompare = user?.passwordHash || DUMMY_HASH;
                 const isValid = await bcrypt.compare(
                     credentials.password,
-                    user.passwordHash,
+                    hashToCompare,
                 );
 
-                if (!isValid) return null;
+                if (!user || !isValid) return null;
 
                 // Esse objeto vira `session.user`
                 return {
