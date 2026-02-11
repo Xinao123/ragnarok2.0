@@ -7,7 +7,12 @@ import PusherClient from "pusher-js";
 // =============================
 let pusherServer: Pusher | null = null;
 
-function getRequiredPusherEnv() {
+function getRequiredPusherEnv(): {
+  appId: string;
+  key: string;
+  secret: string;
+  cluster: string;
+} {
   const appId = process.env.PUSHER_APP_ID;
   const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
   const secret = process.env.PUSHER_SECRET;
@@ -25,7 +30,12 @@ function getRequiredPusherEnv() {
     );
   }
 
-  return { appId, key, secret, cluster };
+  return {
+    appId: appId as string,
+    key: key as string,
+    secret: secret as string,
+    cluster: cluster as string,
+  };
 }
 
 export function getPusherServer() {
