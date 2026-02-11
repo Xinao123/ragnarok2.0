@@ -35,7 +35,6 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
                 });
 
                 if (!user || !user.passwordHash) {
-                    // evita timing attacks por usuÃ¡rio inexistente
                     await bcrypt.compare(credentials.password, DUMMY_HASH);
                     return null;
                 }
