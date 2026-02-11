@@ -7,9 +7,10 @@ function timingSafeEqual(a: string, b: string) {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-export function requireCsrf(req: Request): Response | null {
+export async function requireCsrf(req: Request): Promise<Response | null> {
   const headerToken = req.headers.get(CSRF_HEADER) || "";
-  const cookieToken = cookies().get(CSRF_COOKIE)?.value || "";
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get(CSRF_COOKIE)?.value || "";
 
   if (!headerToken || !cookieToken) {
     return new Response(
