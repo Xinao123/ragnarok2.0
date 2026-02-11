@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { sanitizeText, sanitizeURL } from "@/lib/sanitize";
+import { checkRateLimit, lobbyCreateLimit, apiRateLimit } from "@/lib/rate-limit";
 import {
   LobbyStatus,
   MemberRole,
@@ -29,6 +32,19 @@ async function createLobbyAction(formData: FormData) {
   const user = await getCurrentUser();
   if (!user?.id) {
     redirect("/auth/login");
+  }
+
+  const rateReq = new Request("http://local/lobbies/create", {
+    headers: new Headers(await headers()),
+  });
+  const rateLimit = await checkRateLimit(rateReq, lobbyCreateLimit, user.id);
+  if (!rateLimit.success) {
+    const retryAfter = rateLimit.response.headers.get("Retry-After");
+    throw new Error(
+      retryAfter
+        ? `Muitas tentativas. Tente novamente em ${retryAfter}s.`
+        : "Muitas tentativas. Tente novamente em alguns minutos."
+    );
   }
 
   // Campos comuns do form
@@ -161,9 +177,24 @@ async function joinLobbyAction(formData: FormData) {
     redirect("/auth/login");
   }
 
-  const lobbyId = String(formData.get("lobbyId") || "").trim();
-  if (!lobbyId) {
+  const lobbyIdRaw = String(formData.get("lobbyId") || "").trim();
+  const lobbyIdParsed = z.string().cuid().safeParse(lobbyIdRaw);
+  if (!lobbyIdParsed.success) {
     throw new Error("Lobby inválido.");
+  }
+  const lobbyId = lobbyIdParsed.data;
+
+  const rateReq = new Request("http://local/lobbies/join", {
+    headers: new Headers(await headers()),
+  });
+  const rateLimit = await checkRateLimit(rateReq, apiRateLimit, user.id);
+  if (!rateLimit.success) {
+    const retryAfter = rateLimit.response.headers.get("Retry-After");
+    throw new Error(
+      retryAfter
+        ? `Muitas tentativas. Tente novamente em ${retryAfter}s.`
+        : "Muitas tentativas. Tente novamente em alguns minutos."
+    );
   }
 
   await prisma.$transaction(async (tx) => {
@@ -235,9 +266,24 @@ async function leaveLobbyAction(formData: FormData) {
     redirect("/auth/login");
   }
 
-  const lobbyId = String(formData.get("lobbyId") || "").trim();
-  if (!lobbyId) {
+  const lobbyIdRaw = String(formData.get("lobbyId") || "").trim();
+  const lobbyIdParsed = z.string().cuid().safeParse(lobbyIdRaw);
+  if (!lobbyIdParsed.success) {
     throw new Error("Lobby inválido.");
+  }
+  const lobbyId = lobbyIdParsed.data;
+
+  const rateReq = new Request("http://local/lobbies/leave", {
+    headers: new Headers(await headers()),
+  });
+  const rateLimit = await checkRateLimit(rateReq, apiRateLimit, user.id);
+  if (!rateLimit.success) {
+    const retryAfter = rateLimit.response.headers.get("Retry-After");
+    throw new Error(
+      retryAfter
+        ? `Muitas tentativas. Tente novamente em ${retryAfter}s.`
+        : "Muitas tentativas. Tente novamente em alguns minutos."
+    );
   }
 
   await prisma.$transaction(async (tx) => {
