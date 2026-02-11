@@ -9,6 +9,7 @@ import { triggerPresence } from "@/lib/pusher";
 import { headers } from "next/headers";
 import { checkRateLimit, loginLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
+import { Prisma } from "@prisma/client";
 
 export type AuthFormState = {
   success: boolean;
@@ -25,6 +26,23 @@ const defaultState: AuthFormState = {
   success: false,
   errors: {},
 };
+
+const REGISTER_GENERIC_ERROR =
+  "Nao foi possivel criar a conta. Tente novamente.";
+
+async function registerFailureDelay() {
+  const minMs = 500;
+  const maxMs = 1000;
+  const waitMs = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+}
+
+function genericRegisterFailure(): AuthFormState {
+  return {
+    success: false,
+    errors: { _form: REGISTER_GENERIC_ERROR },
+  };
+}
 
 async function setOnlineByLogin(loginValue: string) {
   // aceita login por username ou email (mais robusto)
@@ -80,34 +98,41 @@ export async function registerAction(
     where: { username },
   });
   if (existingByUsername) {
-    return {
-      success: false,
-      errors: { username: "Já existe um usuário com esse nome." },
-    };
+    await registerFailureDelay();
+    return genericRegisterFailure();
   }
 
   const existingByEmail = await prisma.user.findUnique({
     where: { email },
   });
   if (existingByEmail) {
-    return {
-      success: false,
-      errors: { email: "Já existe uma conta com esse e-mail." },
-    };
+    await registerFailureDelay();
+    return genericRegisterFailure();
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  await prisma.user.create({
-    data: {
-      username,
-      email,
-      name: username,
-      passwordHash,
-      status: "ONLINE",
-      lastSeen: new Date(),
-    },
-  });
+  try {
+    await prisma.user.create({
+      data: {
+        username,
+        email,
+        name: username,
+        passwordHash,
+        status: "ONLINE",
+        lastSeen: new Date(),
+      },
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      await registerFailureDelay();
+      return genericRegisterFailure();
+    }
+    throw error;
+  }
 
   // já loga
   try {
