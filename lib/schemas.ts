@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sanitizeFull } from "@/lib/sanitize";
 
 // =============================
 // USER & AUTH SCHEMAS
@@ -192,13 +193,18 @@ export const DMMessageSchema = z.object({
  * Schema de mensagem de lobby
  */
 export const LobbyMessageSchema = z.object({
-  lobbyId: z.string().uuid("ID de lobby inválido"),
+  lobbyId: z.string().cuid("ID de lobby inválido"),
 
   content: z
     .string()
     .min(1, "Mensagem não pode ser vazia")
     .max(1000, "Mensagem muito longa (máx. 1000)")
-    .trim(),
+    .trim()
+    .transform((val) => sanitizeFull(val))
+    .refine(
+      (val) => val.length > 0,
+      "Mensagem não pode ser vazia após sanitização"
+    ),
 });
 
 // =============================
