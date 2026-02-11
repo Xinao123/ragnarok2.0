@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { sanitizeText } from "@/lib/sanitize";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import {
   LobbyStatus,
   MemberStatus,
@@ -29,6 +31,12 @@ async function updateLobbyAction(formData: FormData) {
 
   const user = await getCurrentUser();
   if (!user?.id) return;
+
+  const req = new Request("http://local/lobbies/update", {
+    headers: new Headers(await headers()),
+  });
+  const limit = await checkRateLimit(req, apiRateLimit, user.id);
+  if (!limit.success) return;
 
   const lobbyId = String(formData.get("lobbyId") || "").trim();
   if (!lobbyId) return;
@@ -81,6 +89,12 @@ async function kickMemberAction(formData: FormData) {
 
   const user = await getCurrentUser();
   if (!user?.id) return;
+
+  const req = new Request("http://local/lobbies/kick", {
+    headers: new Headers(await headers()),
+  });
+  const limit = await checkRateLimit(req, apiRateLimit, user.id);
+  if (!limit.success) return;
 
   const lobbyId = String(formData.get("lobbyId") || "").trim();
   const memberId = String(formData.get("memberId") || "").trim();

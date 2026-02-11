@@ -6,6 +6,8 @@ import type { User } from "@prisma/client";
 import { uploadAvatarToMinio } from "@/lib/storage";
 import { sanitizeText } from "@/lib/sanitize";
 import { logError } from "@/lib/logger";
+import { headers } from "next/headers";
+import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 
 type ImageMime = "image/jpeg" | "image/png" | "image/webp";
@@ -82,6 +84,17 @@ export async function updateProfileAction(
         return {
             success: false,
             errors: { _form: "Você precisa estar logado para editar o perfil." },
+        };
+    }
+
+    const req = new Request("http://local/profile/update", {
+        headers: new Headers(await headers()),
+    });
+    const limit = await checkRateLimit(req, apiRateLimit, user.id);
+    if (!limit.success) {
+        return {
+            success: false,
+            errors: { _form: "Muitas tentativas. Tente novamente em alguns minutos." },
         };
     }
 

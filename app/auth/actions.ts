@@ -94,6 +94,17 @@ export async function registerAction(
     return { success: false, errors };
   }
 
+  const registerReq = new Request("http://local/register", {
+    headers: new Headers(await headers()),
+  });
+  const registerLimit = await checkRateLimit(registerReq, loginLimit);
+  if (!registerLimit.success) {
+    return {
+      success: false,
+      errors: { _form: "Muitas tentativas. Tente novamente em alguns minutos." },
+    };
+  }
+
   const existingByUsername = await prisma.user.findUnique({
     where: { username },
   });
