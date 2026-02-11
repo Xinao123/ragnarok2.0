@@ -39,7 +39,7 @@ async function createLobbyAction(formData: FormData) {
   });
   const rateLimit = await checkRateLimit(rateReq, lobbyCreateLimit, user.id);
   if (!rateLimit.success) {
-    const retryAfter = rateLimit.response.headers.get("Retry-After");
+    const retryAfter = rateLimit.response?.headers.get("Retry-After");
     throw new Error(
       retryAfter
         ? `Muitas tentativas. Tente novamente em ${retryAfter}s.`
@@ -189,7 +189,7 @@ async function joinLobbyAction(formData: FormData) {
   });
   const rateLimit = await checkRateLimit(rateReq, apiRateLimit, user.id);
   if (!rateLimit.success) {
-    const retryAfter = rateLimit.response.headers.get("Retry-After");
+    const retryAfter = rateLimit.response?.headers.get("Retry-After");
     throw new Error(
       retryAfter
         ? `Muitas tentativas. Tente novamente em ${retryAfter}s.`
@@ -278,7 +278,7 @@ async function leaveLobbyAction(formData: FormData) {
   });
   const rateLimit = await checkRateLimit(rateReq, apiRateLimit, user.id);
   if (!rateLimit.success) {
-    const retryAfter = rateLimit.response.headers.get("Retry-After");
+    const retryAfter = rateLimit.response?.headers.get("Retry-After");
     throw new Error(
       retryAfter
         ? `Muitas tentativas. Tente novamente em ${retryAfter}s.`
