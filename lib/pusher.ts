@@ -7,13 +7,35 @@ import PusherClient from "pusher-js";
 // =============================
 let pusherServer: Pusher | null = null;
 
+function getRequiredPusherEnv() {
+  const appId = process.env.PUSHER_APP_ID;
+  const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
+  const secret = process.env.PUSHER_SECRET;
+  const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
+
+  const missing: string[] = [];
+  if (!appId) missing.push("PUSHER_APP_ID");
+  if (!key) missing.push("NEXT_PUBLIC_PUSHER_KEY");
+  if (!secret) missing.push("PUSHER_SECRET");
+  if (!cluster) missing.push("NEXT_PUBLIC_PUSHER_CLUSTER");
+
+  if (missing.length > 0) {
+    throw new Error(
+      `[pusher] Missing required env vars: ${missing.join(", ")}`
+    );
+  }
+
+  return { appId, key, secret, cluster };
+}
+
 export function getPusherServer() {
   if (!pusherServer) {
+    const env = getRequiredPusherEnv();
     pusherServer = new Pusher({
-      appId: process.env.PUSHER_APP_ID!,
-      key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
-      secret: process.env.PUSHER_SECRET!,
-      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+      appId: env.appId,
+      key: env.key,
+      secret: env.secret,
+      cluster: env.cluster,
       useTLS: true,
     });
   }

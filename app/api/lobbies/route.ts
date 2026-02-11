@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { LobbyStatus, MemberStatus } from "@prisma/client";
+import { requireCsrf } from "@/lib/csrf";
+import { checkRateLimit, apiRateLimit } from "@/lib/rate-limit";
 
-// Lista lobbys (opcional, mas útil pra futuras integrações)
+// Lista lobbys (opcional, mas Ãºtil pra futuras integraÃ§Ãµes)
 export async function GET(_req: Request) {
   try {
     const lobbies = await prisma.lobby.findMany({
@@ -42,13 +44,19 @@ export async function GET(_req: Request) {
   }
 }
 
-// POST aqui não é mais usado — toda criação acontece via Server Action em /lobbies.
-// Mantemos apenas um stub com assinatura compatível para não dar erro de tipo.
-export async function POST(_req: Request, _ctx: any) {
+// POST aqui nÃ£o Ã© mais usado â€” toda criaÃ§Ã£o acontece via Server Action em /lobbies.
+// Mantemos apenas um stub com assinatura compatÃ­vel para nÃ£o dar erro de tipo.
+export async function POST(req: Request, _ctx: any) {
+  const csrf = await requireCsrf(req);
+  if (csrf) return csrf;
+
+  const limit = await checkRateLimit(req, apiRateLimit);
+  if (!limit.success) return limit.response;
+
   return NextResponse.json(
     {
       error:
-        "Criação de lobby via /api/lobbies está desativada. Use a página /lobbies (Server Actions).",
+        "CriaÃ§Ã£o de lobby via /api/lobbies estÃ¡ desativada. Use a pÃ¡gina /lobbies (Server Actions).",
     },
     { status: 405 }
   );
